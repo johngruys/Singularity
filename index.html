@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>G Hub</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+  <header>
+    <div class="container header-container">
+      <h1>G Hub</h1>
+      <nav>
+        <ul>
+          <li><a href="#" data-target="hero">Home</a></li>
+          <li><a href="#" data-target="about">About</a></li>
+          <li><a href="#" data-target="games">Games</a></li>
+          <li><a href="#" data-target="help">Help</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section id="hero" class="section active">
+    <div class="container hero-container">
+      <h2>Your Gateway to Gaming Excellence</h2>
+      <p class="tagline">Discover the best browser games—curated for style, creativity, and endless fun.</p>
+      <img src="assets/icons/hero.png" alt="Hero Image" class="hero-image">
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section id="about" class="section">
+    <div class="container">
+      <h2>About G Hub</h2>
+      <p>
+        G Hub is a modern, dark-themed platform designed for gamers who appreciate both aesthetics and functionality. Inspired by the sleek looks of Discord and GitHub, G Hub brings together a diverse collection of browser games.
+      </p>
+      <p>
+        Our mission is to deliver an engaging and immersive gaming experience with an intuitive interface and visually stunning design. Whether you’re a casual player or a hardcore gamer, G Hub has something for everyone.
+      </p>
+      <p class="info-small">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum vitae libero ac diam dictum interdum. Praesent non enim vel arcu aliquam fermentum.
+      </p>
+    </div>
+  </section>
+
+  <!-- Games Section -->
+  <section id="games" class="section">
+    <div class="container">
+      <h2>Our Games</h2>
+      <p>
+        Explore our curated selection of browser games. Click on any game to launch it. To add a new game later, simply drop the new game’s self-contained HTML file into the <code>games/</code> folder and add a new list item with a link to it in the section below.
+      </p>
+      <div id="game-selection">
+        <ul>
+          <!-- Each game icon is referenced by an image located in assets/icons.
+               Update the image src if necessary.
+               To add a new game later, add a new list item:
+               
+               <li>
+                 <a href="games/newgame.html">
+                   <img src="assets/icons/newgame.png" alt="New Game Icon" class="game-icon-image">
+                   <span class="game-title">New Game Title</span>
+                 </a>
+               </li>
+          -->
+          <li>
+            <a href="games/snake.html">
+              <img src="assets/icons/snake.png" alt="Snake Game Icon" class="game-icon-image">
+              <span class="game-title">Snake</span>
+            </a>
+          </li>
+          <li>
+            <a href="games/impossible.html">
+              <img src="assets/icons/impossible.png" alt="Impossible Game Icon" class="game-icon-image">
+              <span class="game-title">Impossible Game 2k25</span>
+            </a>
+          </li>
+          <li>
+            <a href="games/filler.html">
+              <img src="assets/icons/filler.png" alt="Filler Game Icon" class="game-icon-image">
+              <span class="game-title">Filler Game (Coming Soon)</span>
+            </a>
+          </li>
+          <li>
+            <a href="games/loom.html">
+              <img src="assets/icons/snake.png" alt="Loom Game Icon" class="game-icon-image">
+              <span class="game-title">Loom</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Help Section -->
+  <section id="help" class="section">
+    <div class="container">
+      <h2>Need Help?</h2>
+      <p>
+        Use the navigation above to explore all sections of G Hub. If you have any issues or need further assistance, please contact our support team at <a href="mailto:support@ghub.com">support@ghub.com</a>.
+      </p>
+      <p class="info-small">
+        For detailed troubleshooting and frequently asked questions, visit our <a href="https://github.com/yourrepo/ghub" target="_blank">GitHub repository</a> or join our Discord server for community support.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 G Hub. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="js/navigation.js"></script>
+</body>
+</html>

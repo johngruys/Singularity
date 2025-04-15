@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Impossible Game 2k25</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      position: relative;
+    }
+    canvas {
+      border: 2px solid #fff;
+      background-color: #333;
+      display: block;
+      margin: 20px auto;
+    }
+    #startScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 800px;
+      height: 600px;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #startScreen input,
+    #startScreen button {
+      padding: 8px;
+      font-size: 16px;
+      margin: 10px;
+      border: 1px solid #fff;
+    }
+    #startScreen input {
+      width: 200px;
+      background: #222;
+      color: #fff;
+    }
+    #startScreen button {
+      background: #444;
+      color: #fff;
+      cursor: pointer;
+    }
+    a.back {
+      display: inline-block;
+      margin-top: 10px;
+      font-size: 18px;
+      color: #0af;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="startScreen">
+    <h1>Impossible Game 2k25</h1>
+    <p>Please enter your unique player name:</p>
+    <input type="text" id="playerNameInput" placeholder="Your unique name">
+    <button id="startButton">Start Game</button>
+  </div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <a href="../index.html" class="back">Back to Game Hub</a>
+  
+  <script>
+    // Global Variables for Impossible Game 2k25
+    let igGameStarted = false;
+    let igPlayerName = "";
+    let igPlayerBestTimes = {};
+    let igLevel = 1;
+    const igMaxLevel = 10;
+    let igLevelStartTime = 0;
+    let igGameOver = false;
+    let igLevelComplete = false;
+    let igGameWin = false;
+    
+    const igPlayer = {
+      x: 50,
+      y: 600 - 70,
+      width: 30,
+      height: 30,
+      speed: 4,
+      dx: 0,
+      dy: 0
+    };
+    
+    let igCoins = [];
+    let igObstacles = [];
+    
+    const igCanvas = document.getElementById("gameCanvas");
+    const igCtx = igCanvas.getContext("2d");
+    
+    class IGCoin {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 10;
+        this.collected = false;
+      }
+      draw() {
+        igCtx.fillStyle = 'gold';
+        igCtx.beginPath();
+        igCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        igCtx.fill();
+      }
+    }
+    
+    class IGObstacle {
+      constructor(x, y, width, height, moving = false, dx = 0, dy = 0) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.moving = moving;
+        this.dx = dx;
+        this.dy = dy;
+      }
+      draw() {
+        igCtx.fillStyle = 'red';
+        igCtx.fillRect(this.x, this.y, this.width, this.height);
+      }
+      update() {
+        if (this.moving) {
+          this.x += this.dx;
+          this.y += this.dy;
+          if (this.x < 0 || this.x + this.width > igCanvas.width) {
+            this.dx = -this.dx;
+          }
+          if (this.y < 0 || this.y + this.height > igCanvas.height) {
+            this.dy = -this.dy;
+          }
+        }
+      }
+    }
+    
+    function IGLCG(seed) {
+      return function() {
+        seed = (1664525 * seed + 1013904223) % 4294967296;
+        return seed / 4294967296;
+      }
+    }
+    
+    function igCoinCollidesWithObstacles(coinX, coinY, obsArray) {
+      const radius = 10;
+      for (let obs of obsArray) {
+        let testX = coinX;
+        let testY = coinY;
+        if (coinX < obs.x) testX = obs.x;
+        else if (coinX > obs.x + obs.width) testX = obs.x + obs.width;
+        if (coinY < obs.y) testY = obs.y;
+        else if (coinY > obs.y + obs.height) testY = obs.y + obs.height;
+        let distX = coinX - testX;
+        let distY = coinY - testY;
+        let distance = Math.sqrt(distX * distX + distY * distY);
+        if (distance < radius) return true;
+      }
+      return false;
+    }
+    
+    const igLevelLayouts = {};
+    function igPreGenerateLevels() {
+      for (let lvl = 1; lvl <= igMaxLevel; lvl++) {
+        const rng = IGLCG(lvl);
+        const obsCount = lvl + 1;
+        const obstaclesLayout = [];
+        for (let i = 0; i < obsCount; i++) {
+          const width = 50;
+          const height = 30;
+          const x = rng() * (igCanvas.width - width - 100) + 100;
+          const y = rng() * (igCanvas.height - height - 100) + 50;
+          let moving = false;
+          let dx = 0, dy = 0;
+          if (lvl >= 2 && rng() < 0.5) {
+            moving = true;
+            const baseSpeedX = (rng() * 1) + 0.5;
+            const baseSpeedY = (rng() * 1) + 0.5;
+            dx = (rng() < 0.5 ? -1 : 1) * baseSpeedX * (1 + (lvl - 1) * 0.05);
+            dy = (rng() < 0.5 ? -1 : 1) * baseSpeedY * (1 + (lvl - 1) * 0.05);
+          }
+          obstaclesLayout.push({ x, y, width, height, moving, dx, dy });
+        }
+        const coinCount = 5 + lvl;
+        const coinsLayout = [];
+        for (let i = 0; i < coinCount; i++) {
+          let coinX, coinY, attempts = 0;
+          do {
+            coinX = rng() * (igCanvas.width - 20) + 10;
+            coinY = rng() * (igCanvas.height - 20) + 10;
+            attempts++;
+          } while (igCoinCollidesWithObstacles(coinX, coinY, obstaclesLayout) && attempts < 100);
+          coinsLayout.push({ x: coinX, y: coinY });
+        }
+        igLevelLayouts[lvl] = { coins: coinsLayout, obstacles: obstaclesLayout };
+      }
+    }
+    igPreGenerateLevels();
+    
+    function igInitLevel() {
+      igGameOver = false;
+      igLevelComplete = false;
+      igGameWin = false;
+      igPlayer.x = 50;
+      igPlayer.y = igCanvas.height - 70;
+      igPlayer.dx = 0;
+      igPlayer.dy = 0;
+      igCoins = [];
+      const coinData = igLevelLayouts[igLevel].coins;
+      for (let coinObj of coinData) {
+        igCoins.push(new IGCoin(coinObj.x, coinObj.y));
+      }
+      igObstacles = [];
+      const obsData = igLevelLayouts[igLevel].obstacles;
+      for (let obsObj of obsData) {
+        igObstacles.push(new IGObstacle(obsObj.x, obsObj.y, obsObj.width, obsObj.height, obsObj.moving, obsObj.dx, obsObj.dy));
+      }
+      igLevelStartTime = Date.now();
+    }
+    
+    function igLoadPlayerData(username) {
+      const data = localStorage.getItem("IG2k25_" + username);
+      return data ? JSON.parse(data) : {};
+    }
+    
+    function igSavePlayerData() {
+      localStorage.setItem("IG2k25_" + igPlayerName, JSON.stringify(igPlayerBestTimes));
+    }
+    
+    const igStartScreen = document.getElementById("startScreen");
+    const igStartButton = document.getElementById("startButton");
+    const igPlayerNameInput = document.getElementById("playerNameInput");
+    igStartButton.addEventListener("click", () => {
+      const name = igPlayerNameInput.value.trim();
+      console.log("Impossible Game: Start Game clicked with name:", name);
+      if (name !== "") {
+        igPlayerName = name;
+        igPlayerBestTimes = igLoadPlayerData(igPlayerName);
+        igGameStarted = true;
+        igStartScreen.style.display = "none";
+        igInitLevel();
+      }
+    });
+    
+    const igKeys = {};
+    document.addEventListener('keydown', (e) => {
+      igKeys[e.key] = true;
+      if ((igGameOver || igGameWin) && e.key.toLowerCase() === 'r') {
+        igLevel = 1;
+        igInitLevel();
+      }
+    });
+    document.addEventListener('keyup', (e) => {
+      igKeys[e.key] = false;
+    });
+    
+    function igIsCollidingCircleRect(circle, rect) {
+      const distX = Math.abs(circle.x - rect.x - rect.width / 2);
+      const distY = Math.abs(circle.y - rect.y - rect.height / 2);
+      if (distX > (rect.width / 2 + circle.radius)) return false;
+      if (distY > (rect.height / 2 + circle.radius)) return false;
+      if (distX <= (rect.width / 2)) return true;
+      if (distY <= (rect.height / 2)) return true;
+      const dx = distX - rect.width / 2;
+      const dy = distY - rect.height / 2;
+      return (dx * dx + dy * dy <= circle.radius * circle.radius);
+    }
+    
+    function igIsCollidingRectRect(a, b) {
+      return (a.x < b.x + b.width &&
+              a.x + a.width > b.x &&
+              a.y < b.y + b.height &&
+              a.y + a.height > b.y);
+    }
+    
+    function igHandleInput() {
+      if (igGameOver || igLevelComplete || igGameWin) return;
+      igPlayer.dx = 0;
+      igPlayer.dy = 0;
+      if (igKeys["ArrowLeft"] || igKeys["a"]) {
+        igPlayer.dx = -igPlayer.speed;
+      }
+      if (igKeys["ArrowRight"] || igKeys["d"]) {
+        igPlayer.dx = igPlayer.speed;
+      }
+      if (igKeys["ArrowUp"] || igKeys["w"]) {
+        igPlayer.dy = -igPlayer.speed;
+      }
+      if (igKeys["ArrowDown"] || igKeys["s"]) {
+        igPlayer.dy = igPlayer.speed;
+      }
+    }
+    
+    function igUpdateGame() {
+      if (!igGameStarted) return;
+      if (!igGameOver && !igLevelComplete && !igGameWin) {
+        igHandleInput();
+        igPlayer.x += igPlayer.dx;
+        igPlayer.y += igPlayer.dy;
+        if (igPlayer.x < 0) igPlayer.x = 0;
+        if (igPlayer.x + igPlayer.width > igCanvas.width) igPlayer.x = igCanvas.width - igPlayer.width;
+        if (igPlayer.y < 0) igPlayer.y = 0;
+        if (igPlayer.y + igPlayer.height > igCanvas.height) igPlayer.y = igCanvas.height - igPlayer.height;
+        igCoins.forEach(coin => {
+          if (!coin.collected && igIsCollidingCircleRect(coin, igPlayer)) {
+            coin.collected = true;
+          }
+        });
+        igObstacles.forEach(obstacle => {
+          if (igIsCollidingRectRect(igPlayer, obstacle)) {
+            igGameOver = true;
+            igSavePlayerData();
+          }
+        });
+        igObstacles.forEach(obstacle => obstacle.update());
+        if (igCoins.every(coin => coin.collected)) {
+          igLevelComplete = true;
+          let currentTime = (Date.now() - igLevelStartTime) / 1000;
+          if (!igPlayerBestTimes[igLevel] || currentTime < igPlayerBestTimes[igLevel]) {
+            igPlayerBestTimes[igLevel] = currentTime;
+            igSavePlayerData();
+          }
+          setTimeout(() => {
+            if (igLevel < igMaxLevel) {
+              igLevel++;
+              igInitLevel();
+            } else {
+              igGameWin = true;
+            }
+          }, 3000);
+        }
+      }
+    }
+    
+    function igDrawGame() {
+      igCtx.clearRect(0, 0, igCanvas.width, igCanvas.height);
+      igCtx.fillStyle = '#333';
+      igCtx.fillRect(0, 0, igCanvas.width, igCanvas.height);
+      igCoins.forEach(coin => { if (!coin.collected) coin.draw(); });
+      igObstacles.forEach(obstacle => obstacle.draw());
+      igCtx.fillStyle = 'lime';
+      igCtx.fillRect(igPlayer.x, igPlayer.y, igPlayer.width, igPlayer.height);
+      if (igGameStarted) {
+        igCtx.fillStyle = '#fff';
+        igCtx.font = '20px Arial';
+        igCtx.fillText("Level: " + igLevel + " / " + igMaxLevel, 10, 25);
+        let elapsedTime = ((Date.now() - igLevelStartTime) / 1000).toFixed(2);
+        igCtx.fillText("Time: " + elapsedTime + "s", 10, 50);
+        let bestTimeText = igPlayerBestTimes[igLevel] ? igPlayerBestTimes[igLevel].toFixed(2) + "s" : "N/A";
+        igCtx.fillText("Best (This Level): " + bestTimeText, 10, 75);
+        igCtx.fillText("Player: " + igPlayerName, 10, 100);
+      }
+      if (igGameOver) {
+        igCtx.fillStyle = 'red';
+        igCtx.font = '40px Arial';
+        igCtx.fillText("Game Over - Press 'R' to Restart", igCanvas.width / 2 - 280, igCanvas.height / 2);
+      }
+      if (igLevelComplete && !igGameWin) {
+        igCtx.fillStyle = 'yellow';
+        igCtx.font = '40px Arial';
+        igCtx.fillText("Level Complete!", igCanvas.width / 2 - 120, igCanvas.height / 2);
+      }
+      if (igGameWin) {
+        igCtx.fillStyle = 'cyan';
+        igCtx.font = '50px Arial';
+        igCtx.fillText("Game Complete!", igCanvas.width / 2 - 170, igCanvas.height / 2 - 30);
+        igCtx.font = '30px Arial';
+        igCtx.fillText("Press 'R' to Restart", igCanvas.width / 2 - 130, igCanvas.height / 2 + 20);
+      }
+    }
+    
+    function igGameLoop() {
+      igUpdateGame();
+      igDrawGame();
+      requestAnimationFrame(igGameLoop);
+    }
+    igGameLoop();
+  </script>
+</body>
+</html>
