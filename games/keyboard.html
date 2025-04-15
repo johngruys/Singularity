@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>88-Key Piano</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      text-align: center;
+    }
+    #controls {
+      margin-bottom: 10px;
+    }
+    #pianoContainer {
+      display: flex;
+      justify-content: center;
+      margin: 0 auto;
+      overflow-x: auto;
+      border: 1px solid #333;
+    }
+    /* Piano container (sized dynamically) */
+    #piano {
+      position: relative;
+      height: 250px;
+      user-select: none;
+    }
+    #exitButton {
+      position: fixed;      /* Fixes the button to the viewport */
+      top: 10px;            /* 10 pixels from the top */
+      left: 10px;           /* 10 pixels from the left */
+      padding: 10px 15px;   /* Padding similar to typical buttons */
+      background: #a00;     /* A bold red to help it stand out */
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 16px;
+      z-index: 1000;        /* Ensures the button is on top */
+      transition: background 0.2s;
+    }
+    
+    #exitButton:hover {
+      background: #b00;
+    }
+    /* White keys styling */
+    .white-key {
+      position: absolute;
+      width: 60px;
+      height: 250px;
+      background: white;
+      border: 1px solid black;
+      box-sizing: border-box;
+      border-radius: 0 0 5px 5px;
+      cursor: pointer;
+    }
+    /* Black keys styling */
+    .black-key {
+      position: absolute;
+      width: 40px;
+      height: 150px;
+      background: black;
+      border: 1px solid #333;
+      border-radius: 0 0 3px 3px;
+      z-index: 1;
+      cursor: pointer;
+    }
+    /* Visual feedback when a key is activated */
+    .active {
+      opacity: 0.6;
+    }
+    /* Key label styling for white keys */
+    .white-key .key-label {
+       position: absolute;
+       bottom: 5px;
+       width: 100%;
+       text-align: center;
+       font-size: 16px;
+       color: black;
+       pointer-events: none;
+    }
+    /* Key label styling for black keys */
+    .black-key .key-label {
+       position: absolute;
+       bottom: 5px;
+       width: 100%;
+       text-align: center;
+       font-size: 14px;
+       color: white;
+       pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Exit Button in the Top Left -->
+  <button id="exitButton" onclick="window.location.href='../index.html'">Exit Game</button>
+
+  <div id="controls">
+    <button id="octaveDown">Octave Down</button>
+    <span id="octaveDisplay">Octave: 4</span>
+    <button id="octaveUp">Octave Up</button>
+  </div>
+
+  <div id="pianoContainer">
+    <div id="piano"></div>
+  </div>
+
+  <script>
+    // Create a Web Audio API context.
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    // currentOctaveOffset: with offset 0 the computer keyboard mapping sets the "H" key as middle C (MIDI 60).
+    let currentOctaveOffset = 0;
+    
+    // Map keyboard keys: A, S, D, F, G, H, J, K, L, ;, '
+    const keyboardMapping = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', "'"];
+    const baseMappingIndex = 5; // "h" corresponds to MIDI note 60.
+
+    // Computes a standard note label (like "C4") from a given MIDI note.
+    function getNoteLabel(midi) {
+      const noteNamesStandard = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+      let note = noteNamesStandard[midi % 12];
+      let octave = Math.floor(midi / 12) - 1;
+      return note + octave;
+    }
+
+    // Play a note using the Web Audio API.
+    function playNote(midi) {
+      const frequency = 440 * Math.pow(2, (midi - 69) / 12);
+      const osc = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      osc.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      osc.frequency.value = frequency;
+
+      const now = audioContext.currentTime;
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(1, now + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1);
+
+      osc.start(now);
+      osc.stop(now + 1);
+    }
+
+    // Highlight a key that is played.
+    function highlightKey(keyDiv) {
+      keyDiv.classList.add("active");
+      setTimeout(() => keyDiv.classList.remove("active"), 300);
+    }
+
+    // Octave control: update the displayed octave.
+    function updateOctaveDisplay() {
+      const baseOctave = 4; // With offset 0, middle C is in octave 4.
+      const displayOctave = baseOctave + currentOctaveOffset;
+      document.getElementById("octaveDisplay").textContent = "Octave: " + displayOctave;
+    }
+
+    document.getElementById("octaveUp").addEventListener("click", () => {
+      currentOctaveOffset++;
+      updateOctaveDisplay();
+    });
+    document.getElementById("octaveDown").addEventListener("click", () => {
+      currentOctaveOffset--;
+      updateOctaveDisplay();
+    });
+
+    // Map computer keyboard presses to piano notes and highlight keys.
+    document.addEventListener("keydown", function(e) {
+      if (e.repeat) return;
+      let key = e.key;
+      if (key.length === 1) key = key.toLowerCase();
+      const index = keyboardMapping.indexOf(key);
+      if (index !== -1) {
+        const midi = 60 + (index - baseMappingIndex) + (currentOctaveOffset * 12);
+        playNote(midi);
+        const keyElem = document.querySelector(`[data-midi='${midi}']`);
+        if (keyElem) {
+          highlightKey(keyElem);
+        }
+      }
+    });
+
+    // Draw the 88-key piano.
+    const piano = document.getElementById("piano");
+    // Updated dimensions for an enlarged keyboard.
+    const whiteKeyWidth = 60;
+    const whiteKeyHeight = 250;
+    const blackKeyWidth = 40;
+    const blackKeyHeight = 150;
+
+    // Array used to decide key color (starting at A0 which is MIDI 21).
+    const noteNames = ["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"];
+    let whiteKeys = [];
+    let whiteKeyCount = 0;
+    
+    // Create white keys with note labels.
+    for (let midi = 21; midi <= 108; midi++) {
+      const noteIndex = (midi - 21) % 12;
+      const note = noteNames[noteIndex];
+      const isBlack = note.indexOf("#") !== -1;
+      if (!isBlack) {
+        const keyDiv = document.createElement("div");
+        keyDiv.className = "white-key";
+        keyDiv.style.left = (whiteKeyCount * whiteKeyWidth) + "px";
+        keyDiv.dataset.midi = midi;
+        
+        // Add a label showing the note (e.g., "C4").
+        const labelDiv = document.createElement("div");
+        labelDiv.className = "key-label";
+        labelDiv.textContent = getNoteLabel(midi);
+        keyDiv.appendChild(labelDiv);
+        
+        keyDiv.addEventListener("mousedown", function() {
+          playNote(midi);
+          highlightKey(keyDiv);
+        });
+        piano.appendChild(keyDiv);
+        whiteKeys.push({ midi: midi, left: whiteKeyCount * whiteKeyWidth });
+        whiteKeyCount++;
+      }
+    }
+
+    // Create black keys with note labels.
+    for (let midi = 21; midi <= 108; midi++) {
+      const noteIndex = (midi - 21) % 12;
+      const note = noteNames[noteIndex];
+      const isBlack = note.indexOf("#") !== -1;
+      if (isBlack) {
+        let leftWhite = null;
+        for (let candidate = midi - 1; candidate >= 21; candidate--) {
+          const cNoteIndex = (candidate - 21) % 12;
+          const cNote = noteNames[cNoteIndex];
+          if (cNote.indexOf("#") === -1) {
+            const whiteKeyObj = whiteKeys.find(key => Number(key.midi) === candidate);
+            if (whiteKeyObj) {
+              leftWhite = whiteKeyObj.left;
+            }
+            break;
+          }
+        }
+        if (leftWhite === null) continue;
+        const keyDiv = document.createElement("div");
+        keyDiv.className = "black-key";
+        keyDiv.style.left = (leftWhite + whiteKeyWidth * 0.65) + "px";
+        keyDiv.dataset.midi = midi;
+        
+        // Add label to the black key.
+        const labelDiv = document.createElement("div");
+        labelDiv.className = "key-label";
+        labelDiv.textContent = getNoteLabel(midi);
+        keyDiv.appendChild(labelDiv);
+        
+        keyDiv.addEventListener("mousedown", function() {
+          playNote(midi);
+          highlightKey(keyDiv);
+        });
+        piano.appendChild(keyDiv);
+      }
+    }
+
+    piano.style.width = (whiteKeyCount * whiteKeyWidth) + "px";
+    piano.onselectstart = function () { return false; };
+  </script>
+</body>
+</html>

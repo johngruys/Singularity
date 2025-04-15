@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Super Balls</title>
+  <style>
+    /* Center and scale the game */
+    body {
+      background: #1a1a1a;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: sans-serif;
+      color: #eee;
+      position: relative;
+    }
+    /* Canvas: internal resolution 1000x400, scales responsively */
+    canvas {
+      background: #222;
+      border: 2px solid #555;
+      width: 1000px;
+      height: 400px;
+      max-width: 95vw;
+      max-height: 90vh;
+      box-sizing: border-box;
+    }
+    /* In-game Info Panel */
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(20,20,20,0.9);
+      padding: 10px;
+      border: 1px solid #555;
+      border-radius: 5px;
+      z-index: 5;
+      font-size: 14px;
+    }
+    #info button {
+      margin-top: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    /* Restart Button */
+    #restartButton {
+      margin-top: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+      background: #a00;
+      border: none;
+      border-radius: 3px;
+      color: #fff;
+      cursor: pointer;
+    }
+    /* New Exit Button styling */
+    #exitButton {
+      margin-top: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+      background: #a00;
+      border: none;
+      border-radius: 3px;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #exitButton:hover {
+      background: #b00;
+    }
+    /* Start Screen Overlay */
+    #startScreen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      color: #eee;
+    }
+    #startScreen h1 {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+    #startScreen input {
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 3px;
+    }
+    #startScreen button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 3px;
+      background: #444;
+      color: #eee;
+    }
+    /* Shop Window Styles */
+    #shopWindow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #333;
+      color: #eee;
+      padding: 20px;
+      border: 2px solid #fff;
+      border-radius: 10px;
+      z-index: 15;
+      display: none;
+      width: 400px;
+    }
+    #shopWindow h2 {
+      margin-top: 0;
+    }
+    #shopWindow .upgrade {
+      margin: 10px 0;
+      padding: 10px;
+      border: 1px solid #555;
+      border-radius: 5px;
+    }
+    #shopWindow button {
+      margin-top: 5px;
+      padding: 5px 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    /* Pop-up Ad Styles */
+    #popUpAd {
+      position: absolute;
+      width: 300px;
+      padding: 20px;
+      font-size: 20px;
+      text-align: center;
+      border: 2px solid black;
+      z-index: 20;
+    }
+    #popUpAd button {
+      font-size: 16px;
+      padding: 5px 10px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    /* Floating Reward Text */
+    .rewardText {
+      position: absolute;
+      color: #0f0;
+      font-size: 20px;
+      font-weight: bold;
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <!-- Start Screen -->
+  <div id="startScreen">
+    <h1>Cannon Ballz</h1>
+    <p>Enter your unique name:</p>
+    <input type="text" id="playerNameInput" placeholder="Your Name"/>
+    <button id="startButton">Start Game</button>
+  </div>
+  
+  <!-- In-game Info Panel -->
+  <div id="info">
+    <div>Player: <span id="playerDisplay"></span></div>
+    <div>Cannon Angle: <span id="angleDisplay"></span></div>
+    <div>Shot Power: <span id="powerDisplay"></span> (<span id="powerPercentDisplay"></span>%)</div>
+    <div>Current Streak: <span id="streakDisplay">0</span></div>
+    <div>High Score: <span id="highScoreDisplay">0</span></div>
+    <div>Money: $<span id="moneyDisplay">0</span></div>
+    <button id="shopButton">Shop</button>
+    <button id="restartButton">Restart Game</button>
+    <!-- Updated exit button -->
+    <button id="exitButton" onclick="window.location.href='../index.html'">Exit Game</button>
+    <div style="margin-top:5px;">Click &amp; hold the left mouse button to charge, then release to shoot</div>
+  </div>
+
+  
+  
+  
+  <!-- Shop Window (hidden by default) -->
+  <div id="shopWindow">
+    <h2>Shop</h2>
+    <div id="shopContent"></div>
+    <button id="closeShopButton">Close Shop</button>
+  </div>
+  
+  <!-- Game Canvas -->
+  <canvas id="gameCanvas" width="1000" height="400"></canvas>
+  
+  <!-- Floating Rewards Container -->
+  <div id="rewardsContainer"></div>
+  
+  <script>
+    window.onload = function() {
+      // ==== Audio Setup ====
+      // Replace these with valid paths/URLs to your audio files.
+      const chaChing = new Audio("cha-ching.mp3");
+      const bgMusic = new Audio("medieval.mp3");
+      bgMusic.loop = true;
+      bgMusic.volume = 0.3;
+      
+      // ==== Global Variables & Constants ====
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      
+      // UI Elements.
+      const playerDisplay = document.getElementById("playerDisplay");
+      const angleDisplay = document.getElementById("angleDisplay");
+      const powerDisplay = document.getElementById("powerDisplay");
+      const powerPercentDisplay = document.getElementById("powerPercentDisplay");
+      const streakDisplay = document.getElementById("streakDisplay");
+      const highScoreDisplay = document.getElementById("highScoreDisplay");
+      const moneyDisplay = document.getElementById("moneyDisplay");
+      const shopButton = document.getElementById("shopButton");
+      const shopWindow = document.getElementById("shopWindow");
+      const shopContent = document.getElementById("shopContent");
+      const closeShopButton = document.getElementById("closeShopButton");
+      const restartButton = document.getElementById("restartButton");
+      const rewardsContainer = document.getElementById("rewardsContainer");
+      
+      // Start Screen Elements.
+      const startScreen = document.getElementById("startScreen");
+      const playerNameInput = document.getElementById("playerNameInput");
+      const startButton = document.getElementById("startButton");
+      
+      // Game Physics & Shot Parameters.
+      const maxChargeTime = 2000; // ms.
+      const maxPower = 500;       // px/s.
+      const gravity = 400;        // px/s².
+      const effectiveMaxPower = 0.98 * maxPower;
+      
+      // Cannon Properties.
+      const cannon = {
+        x: 100,
+        y: canvas.height - 50,
+        angle: Math.PI / 4, // 45° initial.
+        minAngle: Math.PI / 12,
+        maxAngle: Math.PI / 2,
+        barrelLength: 50,
+        recoil: 0
+      };
+      const baseRadius = 25; // Cannon base radius.
+      
+      // Define reachable target region (using nominal 45° shot).
+      const nominalAngle = Math.PI / 4;
+      const spawnDistance = baseRadius + cannon.barrelLength;
+      const launchX = cannon.x + Math.cos(nominalAngle) * spawnDistance;
+      const launchY = cannon.y - Math.sin(nominalAngle) * spawnDistance;
+      const maxRange = (effectiveMaxPower * effectiveMaxPower) / gravity;
+      const minTargetX = launchX + 150;
+      const maxTargetX = Math.min(canvas.width - 50, launchX + maxRange * 0.9);
+      const minTargetY = launchY - 50;
+      const maxTargetY = canvas.height - 50;
+      
+      // Game State Variables.
+      let playerName = "";
+      let streak = 0;
+      let highScore = 0;
+      let money = 0;
+      let projectiles = [];
+      let target = null;
+      let charging = false;
+      let chargeStartTime = 0;
+      let currentPower = 0;
+      let lastUpdateTime = Date.now();
+      
+      // Floating Rewards.
+      let floatingRewards = [];
+      
+      // Player Upgrades.
+      // Added "improvedTrajectory" upgrade with an initial level of 0.
+      let upgrades = { power: 0, ballSize: 0, multiShot: 0, improvedTrajectory: 0 };
+      
+      // Upgrade cost constants.
+      const baseCost = { power: 20, ballSize: 15, multiShot: 50, improvedTrajectory: 30 };
+      const costFactor = 3;
+      
+      // Smoke Particles.
+      let smokeParticles = [];
+      
+      // Pop-up Ads.
+      const ads = [
+        { title: "Cannon Boosters", message: "Upgrade your cannon for extra oomph!" },
+        { title: "Mega Blast Energy", message: "Fuel your fire with Mega Blast Energy Drink!" },
+        { title: "FortressPlus", message: "Fortify your defenses with FortressPlus!" },
+        { title: "Cannonball Insurance", message: "Protect your shots with our cannonball insurance!" },
+        { title: "Nitro Rides", message: "Experience explosive speed with Nitro Rides!" }
+      ];
+      let gamePaused = false;
+      
+      // ==== Utility Functions for Persistent Data ====
+      function loadPlayerStats(name) {
+        const storedScore = localStorage.getItem("cannonGame_" + name + "_highScore");
+        return storedScore ? parseInt(storedScore) : 0;
+      }
+      function updatePlayerHighScore(name, score) {
+        localStorage.setItem("cannonGame_" + name + "_highScore", score);
+      }
+      function loadPlayerMoney(name) {
+        const storedMoney = localStorage.getItem("cannonGame_" + name + "_money");
+        return storedMoney ? parseInt(storedMoney) : 0;
+      }
+      function updatePlayerMoney(name, moneyValue) {
+        localStorage.setItem("cannonGame_" + name + "_money", moneyValue);
+      }
+      function loadPlayerUpgrades(name) {
+        const storedUpgrades = localStorage.getItem("cannonGame_" + name + "_upgrades");
+        return storedUpgrades ? JSON.parse(storedUpgrades) : { power: 0, ballSize: 0, multiShot: 0, improvedTrajectory: 0 };
+      }
+      function updatePlayerUpgrades(name, upgradesObj) {
+        localStorage.setItem("cannonGame_" + name + "_upgrades", JSON.stringify(upgradesObj));
+      }
+      
+      // ==== Effective Gravity Calculation ====
+      // Improved Trajectory reduces effective gravity by 5% per level.
+      function getEffectiveGravity() {
+        return gravity * (1 - 0.05 * upgrades.improvedTrajectory);
+      }
+      
+      // ==== Compute Minimal Required Speed Function ====
+      function computeMinSpeed(X, Y) {
+        if (X <= 0) return Infinity;
+        let ratio = Y / X;
+        let u_opt = ratio + Math.sqrt(ratio * ratio + 1);
+        let numerator = gravity * X * X * (1 + u_opt * u_opt);
+        let denominator = 2 * (X * u_opt - Y);
+        if (denominator <= 0) return Infinity;
+        return Math.sqrt(numerator / denominator);
+      }
+      
+      // ==== Target Spawn Function ====
+      function spawnTarget() {
+        let candidate, X, Y, v_req;
+        let attempts = 0;
+        do {
+          candidate = {
+            x: Math.random() * (maxTargetX - minTargetX) + minTargetX,
+            y: Math.random() * (maxTargetY - minTargetY) + minTargetY,
+            radius: Math.random() * 10 + 15
+          };
+          X = candidate.x - launchX;
+          Y = launchY - candidate.y;
+          v_req = computeMinSpeed(X, Y);
+          attempts++;
+          if (attempts > 1000) break;
+        } while (v_req > effectiveMaxPower);
+        candidate.vx = Math.random() * 40 - 20;
+        candidate.vy = Math.random() * 40 - 20;
+        target = candidate;
+      }
+      spawnTarget();
+      
+      // ==== Input Handling ====
+      document.addEventListener("keydown", function(e) {
+        if (e.key === "ArrowUp") {
+          cannon.angle += 0.05;
+          if (cannon.angle > cannon.maxAngle) cannon.angle = cannon.maxAngle;
+        } else if (e.key === "ArrowDown") {
+          cannon.angle -= 0.05;
+          if (cannon.angle < cannon.minAngle) cannon.angle = cannon.minAngle;
+        }
+      });
+      canvas.addEventListener("mousedown", function(e) {
+        if (projectiles.length === 0 && !gamePaused) {
+          charging = true;
+          chargeStartTime = Date.now();
+        }
+      });
+      canvas.addEventListener("mouseup", function(e) {
+        if (charging && projectiles.length === 0 && !gamePaused) {
+          const chargeDuration = Date.now() - chargeStartTime;
+          currentPower = Math.min(chargeDuration / maxChargeTime, 1) * maxPower;
+          shootProjectile(currentPower);
+          charging = false;
+          currentPower = 0;
+        }
+      });
+      
+      // ==== Cannon Smoke Particle System ====
+      function spawnSmoke(x, y) {
+        const numParticles = 15;
+        for (let i = 0; i < numParticles; i++) {
+          let angle = Math.random() * Math.PI * 2;
+          let speed = Math.random() * 50 + 20;
+          smokeParticles.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 30,
+            size: Math.random() * 5 + 5,
+            life: Math.random() * 0.5 + 0.5,
+            alpha: 0.7
+          });
+        }
+      }
+      function updateSmoke(dt) {
+        for (let i = smokeParticles.length - 1; i >= 0; i--) {
+          let p = smokeParticles[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.life -= dt;
+          p.alpha = p.life;
+          p.size += dt * 10;
+          if (p.life <= 0) {
+            smokeParticles.splice(i, 1);
+          }
+        }
+      }
+      function drawSmoke() {
+        ctx.save();
+        smokeParticles.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(100,100,100," + p.alpha + ")";
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+      
+      // ==== Floating Rewards Functions ====
+      function addFloatingReward(x, y, value) {
+        floatingRewards.push({ x: x, y: y, value: value, life: 2.0 });
+      }
+      function updateFloatingRewards(dt) {
+        for (let i = floatingRewards.length - 1; i >= 0; i--) {
+          let reward = floatingRewards[i];
+          reward.life -= dt;
+          reward.y -= dt * 20;
+          if (reward.life <= 0) {
+            floatingRewards.splice(i, 1);
+          }
+        }
+      }
+      function drawFloatingRewards() {
+        floatingRewards.forEach(reward => {
+          ctx.save();
+          ctx.globalAlpha = reward.life / 2.0;
+          ctx.fillStyle = "#0f0";
+          ctx.font = "20px sans-serif";
+          ctx.fillText("$" + reward.value, reward.x, reward.y);
+          ctx.restore();
+        });
+      }
+      
+      // ==== Projectile Firing & Multi-Shot (using Date.now() integration) ====
+      function shootProjectile(power) {
+        let count = 1 + upgrades.multiShot;
+        let angleOffsets = [];
+        if (count === 1) {
+          angleOffsets = [0];
+        } else {
+          let delta = 0.05;
+          for (let i = 0; i < count; i++) {
+            let offset = -delta + (2 * delta * (i / (count - 1)));
+            angleOffsets.push(offset);
+          }
+        }
+        let effectivePower = power * (1 + 0.1 * upgrades.power);
+        for (let offset of angleOffsets) {
+          let angle = cannon.angle + offset;
+          let proj = {
+            x0: cannon.x + Math.cos(angle) * (baseRadius + cannon.barrelLength),
+            y0: cannon.y - Math.sin(angle) * (baseRadius + cannon.barrelLength),
+            vx: Math.cos(angle) * effectivePower,
+            vy: -Math.sin(angle) * effectivePower,
+            launchTime: Date.now()
+          };
+          projectiles.push(proj);
+        }
+        spawnSmoke(cannon.x + Math.cos(cannon.angle) * (baseRadius + cannon.barrelLength),
+                   cannon.y - Math.sin(cannon.angle) * (baseRadius + cannon.barrelLength));
+      }
+      
+      // ==== Update Projectiles Using Date.now() ====
+      function updateProjectiles() {
+        if (projectiles.length === 0) return;
+        let remaining = [];
+        let hitOccurred = false;
+        for (let proj of projectiles) {
+          let dtProj = (Date.now() - proj.launchTime) / 1000;
+          const effectiveGravity = getEffectiveGravity();
+          proj.x = proj.x0 + proj.vx * dtProj;
+          proj.y = proj.y0 + proj.vy * dtProj + 0.5 * effectiveGravity * dtProj * dtProj;
+          if (!hitOccurred && target) {
+            let dx = proj.x - target.x;
+            let dy = proj.y - target.y;
+            if (Math.sqrt(dx * dx + dy * dy) < target.radius) {
+              hitOccurred = true;
+            }
+          }
+          if (proj.x >= 0 && proj.x <= canvas.width && proj.y >= 0 && proj.y <= canvas.height) {
+            remaining.push(proj);
+          }
+        }
+        if (hitOccurred) {
+          let baseReward = 10 - ((target.radius - 15) * 0.8);
+          let multiplier = 1 + (streak / 10);
+          let reward = Math.round(baseReward * multiplier);
+          money += reward;
+          updatePlayerMoney(playerName, money);
+          addFloatingReward(target.x, target.y, reward);
+          streak++;
+          if (streak > highScore) {
+            highScore = streak;
+            updatePlayerHighScore(playerName, highScore);
+          }
+          // Play cha-ching sound effect.
+          chaChing.play();
+          spawnTarget();
+          projectiles = [];
+        } else if (remaining.length === 0 && projectiles.length > 0) {
+          streak = 0;
+          projectiles = [];
+        } else {
+          projectiles = remaining;
+        }
+      }
+      
+      function drawProjectiles() {
+        let ballRadius = 5 + upgrades.ballSize * 1.5;
+        projectiles.forEach(proj => {
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, ballRadius, 0, Math.PI * 2);
+          ctx.fillStyle = "yellow";
+          ctx.fill();
+        });
+      }
+      
+      // ==== Update Target Movement ====
+      function updateTarget(dt) {
+        if (target) {
+          target.x += target.vx * dt;
+          target.y += target.vy * dt;
+          if (target.x - target.radius < minTargetX) {
+            target.x = minTargetX + target.radius;
+            target.vx *= -1;
+          } else if (target.x + target.radius > maxTargetX) {
+            target.x = maxTargetX - target.radius;
+            target.vx *= -1;
+          }
+          if (target.y - target.radius < minTargetY) {
+            target.y = minTargetY + target.radius;
+            target.vy *= -1;
+          } else if (target.y + target.radius > maxTargetY) {
+            target.y = maxTargetY - target.radius;
+            target.vy *= -1;
+          }
+        }
+      }
+      
+      // ==== Trajectory Preview (using Date.now() integration) ====
+      function drawTrajectoryPreview() {
+        let previewPower = charging ?
+           Math.min((Date.now() - chargeStartTime) / maxChargeTime, 1) * maxPower :
+           0.5 * maxPower;
+        const effectiveGravity = getEffectiveGravity();
+        let count = 1 + upgrades.multiShot;
+        let offsets = [];
+        if (count === 1) {
+          offsets = [0];
+        } else {
+          let delta = 0.05;
+          for (let i = 0; i < count; i++) {
+            offsets.push(-delta + (2 * delta * (i / (count - 1))));
+          }
+        }
+        offsets.forEach(function(offset) {
+          let angle = cannon.angle + offset;
+          const startX = cannon.x + Math.cos(angle) * (baseRadius + cannon.barrelLength);
+          const startY = cannon.y - Math.sin(angle) * (baseRadius + cannon.barrelLength);
+          const vx = Math.cos(angle) * previewPower;
+          const vy = -Math.sin(angle) * previewPower;
+          ctx.fillStyle = "rgba(0,150,255,0.5)";
+          for (let t = 0; t < 3; t += 0.2) {
+            const x = startX + vx * t;
+            const y = startY + vy * t + 0.5 * effectiveGravity * t * t;
+            if (x >= 0 && x <= canvas.width && y >= 0 && y <= canvas.height) {
+              ctx.beginPath();
+              ctx.arc(x, y, 3, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        });
+      }
+      
+      // ==== Drawing Functions ====
+      
+      // Draw the cannon base, wheels, and barrel.
+      function drawCannon() {
+        // Draw cannon base.
+        ctx.save();
+        ctx.translate(cannon.x, cannon.y);
+        let baseGradient = ctx.createRadialGradient(0, 0, 5, 0, 0, baseRadius);
+        baseGradient.addColorStop(0, "#555");
+        baseGradient.addColorStop(1, "#222");
+        ctx.beginPath();
+        ctx.arc(0, 0, baseRadius, 0, Math.PI * 2);
+        ctx.fillStyle = baseGradient;
+        ctx.fill();
+        ctx.strokeStyle = "#777";
+        ctx.stroke();
+        // Draw wheels.
+        function drawWheel(x, y) {
+          ctx.save();
+          ctx.translate(x, y);
+          let wheelGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, 10);
+          wheelGrad.addColorStop(0, "#999");
+          wheelGrad.addColorStop(1, "#444");
+          ctx.beginPath();
+          ctx.arc(0, 0, 10, 0, Math.PI * 2);
+          ctx.fillStyle = wheelGrad;
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.stroke();
+          ctx.restore();
+        }
+        drawWheel(-15, 25);
+        drawWheel(15, 25);
+        ctx.restore();
+        
+        // Draw the cannon barrel as a solid black rectangle.
+        ctx.save();
+        ctx.translate(cannon.x, cannon.y);
+        // IMPORTANT: Rotate by -cannon.angle (not +cannon.angle) so the barrel points in the same direction
+        // as the projectile spawn point.
+        ctx.rotate(-cannon.angle);
+        ctx.translate(baseRadius, 0);
+        let thickness = 12;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, -thickness/2, cannon.barrelLength, thickness);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, -thickness/2, cannon.barrelLength, thickness);
+        ctx.restore();
+      }
+      
+      // Draw the target.
+      function drawTarget() {
+        if (target) {
+          ctx.save();
+          ctx.translate(target.x, target.y);
+          let outerGrad = ctx.createRadialGradient(0, 0, target.radius * 0.7, 0, 0, target.radius);
+          outerGrad.addColorStop(0, "#fff");
+          outerGrad.addColorStop(1, "#ddd");
+          ctx.beginPath();
+          ctx.arc(0, 0, target.radius, 0, Math.PI * 2);
+          ctx.fillStyle = outerGrad;
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#333";
+          ctx.stroke();
+          let middleRadius = target.radius * 0.66;
+          let middleGrad = ctx.createRadialGradient(0, 0, middleRadius * 0.5, 0, 0, middleRadius);
+          middleGrad.addColorStop(0, "#f33");
+          middleGrad.addColorStop(1, "#c00");
+          ctx.beginPath();
+          ctx.arc(0, 0, middleRadius, 0, Math.PI * 2);
+          ctx.fillStyle = middleGrad;
+          ctx.fill();
+          let innerRadius = target.radius * 0.33;
+          let innerGrad = ctx.createRadialGradient(0, 0, innerRadius * 0.2, 0, 0, innerRadius);
+          innerGrad.addColorStop(0, "#fff");
+          innerGrad.addColorStop(1, "#eee");
+          ctx.beginPath();
+          ctx.arc(0, 0, innerRadius, 0, Math.PI * 2);
+          ctx.fillStyle = innerGrad;
+          ctx.fill();
+          let dotRadius = target.radius * 0.1;
+          ctx.beginPath();
+          ctx.arc(0, 0, dotRadius, 0, Math.PI * 2);
+          ctx.fillStyle = "#333";
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      
+      // Draw projectiles.
+      function drawProjectiles() {
+        let ballRadius = 5 + upgrades.ballSize * 1.5;
+        projectiles.forEach(proj => {
+          ctx.beginPath();
+          ctx.arc(proj.x, proj.y, ballRadius, 0, Math.PI * 2);
+          ctx.fillStyle = "yellow";
+          ctx.fill();
+        });
+      }
+      
+      // Draw the charging power bar.
+      function drawPowerBar() {
+        if (charging) {
+          const chargeDuration = Date.now() - chargeStartTime;
+          currentPower = Math.min(chargeDuration / maxChargeTime, 1) * maxPower;
+          const percent = Math.min(chargeDuration / maxChargeTime, 1) * 100;
+          const barWidth = 100;
+          const barHeight = 10;
+          const barX = cannon.x - 50;
+          const barY = cannon.y + 30;
+          ctx.fillStyle = "#555";
+          ctx.fillRect(barX, barY, barWidth, barHeight);
+          ctx.fillStyle = "#0af";
+          ctx.fillRect(barX, barY, barWidth * (currentPower / maxPower), barHeight);
+          ctx.strokeStyle = "#fff";
+          ctx.strokeRect(barX, barY, barWidth, barHeight);
+          powerDisplay.textContent = currentPower.toFixed(1);
+          powerPercentDisplay.textContent = percent.toFixed(0);
+        } else {
+          powerDisplay.textContent = "0";
+          powerPercentDisplay.textContent = "0";
+        }
+      }
+      
+      // ==== UI Update ====
+      function updateUI() {
+        angleDisplay.textContent = (cannon.angle * 180 / Math.PI).toFixed(1) + "°";
+        streakDisplay.textContent = streak;
+        highScoreDisplay.textContent = highScore;
+        playerDisplay.textContent = playerName;
+        moneyDisplay.textContent = money;
+      }
+      
+      // ==== Shop Functions ====
+      function getUpgradeCost(type) {
+        let base = baseCost[type];
+        let level = upgrades[type];
+        return base * Math.pow(costFactor, level);
+      }
+      function updateShopUI() {
+        let html = `<p>Money: $${money}</p>`;
+        html += `<div class="upgrade">
+                  <strong>Cannon Power</strong> (Level: ${upgrades.power})<br>
+                  Increases your shot multiplier by 10% per level.<br>
+                  Cost: $${getUpgradeCost("power")}<br>
+                  <button onclick="buyUpgrade('power')">Buy Upgrade</button>
+                </div>`;
+        html += `<div class="upgrade">
+                  <strong>Cannon Ball Size</strong> (Level: ${upgrades.ballSize})<br>
+                  Increases your ball size.<br>
+                  Cost: $${getUpgradeCost("ballSize")}<br>
+                  <button onclick="buyUpgrade('ballSize')">Buy Upgrade</button>
+                </div>`;
+        html += `<div class="upgrade">
+                  <strong>Multi-Shot</strong> (Level: ${upgrades.multiShot})<br>
+                  Fires additional cannon balls.<br>
+                  Cost: $${getUpgradeCost("multiShot")}<br>
+                  <button onclick="buyUpgrade('multiShot')">Buy Upgrade</button>
+                </div>`;
+        html += `<div class="upgrade">
+                  <strong>Improved Trajectory</strong> (Level: ${upgrades.improvedTrajectory})<br>
+                  Reduces effective gravity by 5% per level.<br>
+                  Cost: $${getUpgradeCost("improvedTrajectory")}<br>
+                  <button onclick="buyUpgrade('improvedTrajectory')">Buy Upgrade</button>
+                </div>`;
+        shopContent.innerHTML = html;
+      }
+      window.buyUpgrade = function(type) {
+        let cost = getUpgradeCost(type);
+        if (money >= cost) {
+          money -= cost;
+          upgrades[type]++;
+          updatePlayerMoney(playerName, money);
+          updatePlayerUpgrades(playerName, upgrades);
+          updateShopUI();
+          updateUI();
+        } else {
+          alert("Not enough money!");
+        }
+      };
+      shopButton.addEventListener("click", function() {
+        shopWindow.style.display = "block";
+        updateShopUI();
+        gamePaused = true;
+      });
+      closeShopButton.addEventListener("click", function() {
+        shopWindow.style.display = "none";
+        gamePaused = false;
+      });
+      
+      // ==== Restart Game ====
+      restartButton.addEventListener("click", function() {
+        streak = 0;
+        money = 0;
+        upgrades = { power: 0, ballSize: 0, multiShot: 0, improvedTrajectory: 0 };
+        projectiles = [];
+        spawnTarget();
+        floatingRewards = [];
+        updatePlayerMoney(playerName, money);
+        updatePlayerUpgrades(playerName, upgrades);
+        updateUI();
+      });
+      
+      // ==== Pop-up Ad Functions ====
+      function getRandomBrightColor() {
+        const colors = ["#FF4444", "#FFBB33", "#00C851", "#33B5E5", "#AA66CC", "#FF8800"];
+        return colors[Math.floor(Math.random() * colors.length)];
+      }
+      function getRandomAd() {
+        return ads[Math.floor(Math.random() * ads.length)];
+      }
+      function scheduleAd() {
+        let delay = Math.random() * 15000 + 15000; // 15-30 sec.
+        setTimeout(showAd, delay);
+      }
+      function showAd() {
+        gamePaused = true;
+        const adData = getRandomAd();
+        const ad = document.createElement("div");
+        ad.id = "popUpAd";
+        ad.style.backgroundColor = getRandomBrightColor();
+        ad.style.left = (canvas.offsetLeft + canvas.width / 2 - 150) + "px";
+        ad.style.top = (canvas.offsetTop + canvas.height / 2 - 50) + "px";
+        ad.innerHTML = `<p><strong>${adData.title}</strong></p>
+                        <p>${adData.message}</p>
+                        <button id="closeAdButton">Close Ad</button>`;
+        document.body.appendChild(ad);
+        document.getElementById("closeAdButton").addEventListener("click", function() {
+          ad.remove();
+          gamePaused = false;
+          scheduleAd();
+        });
+      }
+      
+      // ==== Main Game Loop ====
+      function gameLoop() {
+        if (gamePaused) {
+          lastUpdateTime = Date.now();
+          requestAnimationFrame(gameLoop);
+          return;
+        }
+        const now = Date.now();
+        const dt = (now - lastUpdateTime) / 1000;
+        lastUpdateTime = now;
+        updateProjectiles();
+        updateTarget(dt);
+        updateSmoke(dt);
+        updateFloatingRewards(dt);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (projectiles.length === 0) {
+          drawTrajectoryPreview();
+        }
+        drawCannon();
+        drawTarget();
+        drawProjectiles();
+        drawSmoke();
+        drawFloatingRewards();
+        drawPowerBar();
+        updateUI();
+        requestAnimationFrame(gameLoop);
+      }
+      
+      // ==== Start Screen Handling ====
+      startButton.addEventListener("click", function() {
+        const name = playerNameInput.value.trim();
+        if (name !== "") {
+          playerName = name;
+          highScore = loadPlayerStats(playerName);
+          money = loadPlayerMoney(playerName);
+          upgrades = loadPlayerUpgrades(playerName);
+          startScreen.style.display = "none";
+          lastUpdateTime = Date.now();
+          bgMusic.play();
+          scheduleAd();
+          gameLoop();
+        } else {
+          alert("Please enter a valid name.");
+        }
+      });
+    };
+  </script>
+</body>
+</html>

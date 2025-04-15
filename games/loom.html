@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Raycast Shooter Game – Enhanced</title>
+  <title>Raycast Shooter Game – Enhanced Gameplay</title>
   <style>
-    /* Reset and full-screen canvas styling */
+    /* Reset and full-screen container styling */
     html, body {
       margin: 0;
       padding: 0;
@@ -13,12 +13,14 @@
       font-family: sans-serif;
       color: #fff;
     }
-    /* The canvas will be sized dynamically via JavaScript */
+    /* The canvas will nearly fill the screen. 
+       It is sized via JavaScript so that there’s room on the sides for instructions/ads. */
     #gameCanvas {
       display: block;
       background: #444;
       margin: auto;
     }
+    /* Instructions overlay */
     #instructions {
       position: absolute;
       top: 10px;
@@ -27,6 +29,21 @@
       background: rgba(0,0,0,0.6);
       padding: 8px 12px;
       border-radius: 4px;
+      font-size: 14px;
+    }
+    /* Back button overlay */
+    #backButton {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+    }
+    #backButton a {
+      color: #fff;
+      background: rgba(0,0,0,0.7);
+      padding: 8px 12px;
+      border-radius: 4px;
+      text-decoration: none;
       font-size: 14px;
     }
   </style>
@@ -38,80 +55,80 @@
     Move mouse: Pan camera (click the canvas to lock the pointer)<br>
     Left-click: Fire gun
   </div>
+  <div id="backButton">
+    <a href="../index.html">Back</a>
+  </div>
   <canvas id="gameCanvas"></canvas>
   
   <script>
     /********************************************************************
-     * Raycast Shooter Game – Enhanced Version
+     * Raycast Shooter Game – Enhanced Gameplay
      *
-     * Modifications:
-     * 1. Resizable canvas: The canvas now fills most of the screen,
-     *    leaving room for instructions/ads.
-     *
-     * 2. Enemies: Instead of flat red squares, enemies are drawn as
-     *    red 3D–styled floating spheres. Their rendering is skipped if
-     *    they are occluded by walls (using a simple ray sample test).
-     *
-     * 3. Indicator Bar: A bar is drawn at the top with a red dot showing
-     *    the direction (relative to the player’s view) of an enemy even if
-     *    occluded.
-     *
-     * 4. Weapon Overlay: A graphic is drawn in the bottom right so it
-     *    appears the player is holding a gun.
-     *
-     * 5. Smoke Trail: When the gun is fired, a smoke trail is drawn from
-     *    the tip of the weapon to the projectile target (here assumed to be
-     *    the center of the view) that lingers for one second.
+     * Enhancements:
+     * - Responsive canvas: fills most of the screen with side margins.
+     * - Enemies are now red 3D floating spheres (rendered with a radial
+     *   gradient) and are occluded by walls via a computed z-buffer.
+     * - A HUD bar at the top shows red dot indicators pointing toward any
+     *   enemy in the field of view (even when occluded).
+     * - A futuristic laser gun graphic is overlayed at the bottom right.
+     * - When fired, a laser beam appears from the gun tip to the target,
+     *   lingering for a second.
+     * - A "Back" button is added, and an enemy counter is displayed.
      ********************************************************************/
-
+    
     // -------------------- Global Variables --------------------
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // These will be set on resize.
+    // We'll update these when the canvas is resized.
     let screenWidth, screenHeight, projectionPlaneDist;
     
-    // Game constants.
-    const FOV = Math.PI / 3; // 60° field of view
+    // Field-of-view and other constants.
+    const FOV = Math.PI / 1.5; // 60° FOV
     const maxDepth = 20;     // Maximum raycasting depth.
     const moveSpeed = 3.0;   // Movement speed (units per second)
-    const mouseSensitivity = 0.002;  // Adjust for desired panning speed
-
-    // Global array for smoke trail effects.
-    let smokeTrails = [];
-
-    // -------------------- Resize Handling --------------------
-    function resizeCanvas() {
-      // Fill about 85% of the available window size.
-      canvas.width = window.innerWidth * 0.85;
-      canvas.height = window.innerHeight * 0.85;
-      screenWidth = canvas.width;
-      screenHeight = canvas.height;
-      // Recalculate projection plane distance for proper perspective.
-      projectionPlaneDist = (screenWidth / 2) / Math.tan(FOV / 2);
-    }
-    window.addEventListener("resize", resizeCanvas);
-    // Call once at load.
-    resizeCanvas();
-
-    // -------------------- Game State Variables --------------------
+    const mouseSensitivity = 0.002;  // Mouse sensitivity for panning.
+    
+    // Global array for laser beams.
+    let laserBeams = []; // Each beam: {start, end, timestamp}
+    
+    // Global variable to hold the current gun tip position.
+    let gunTip = { x: 0, y: 0 };
+    
+    // Will store the wall distances for each column (z-buffer).
+    let zBuffer = [];
+    
+    // Game state variables
     let map = [];         // Current level map (array of strings)
     let mapWidth = 0;
     let mapHeight = 0;
     let currentLevel = 1;
     let levelCompleteTimestamp = null;
     let gameOver = false;
-
+    
     // -------------------- Player and Enemies --------------------
     const player = {
       x: 1.5,    // Starting position (reset each level)
       y: 1.5,
       angle: 0   // Facing right initially
     };
-
-    // Array of enemy objects: each with a position and an "alive" flag.
+    
+    // Array of enemy objects: each with position and alive flag.
     const enemies = [];
-
+    
+    // -------------------- Responsive Canvas Setup --------------------
+    function resizeCanvas() {
+      // Set canvas to 90% of viewport width and height.
+      canvas.width = window.innerWidth * 0.9;
+      canvas.height = window.innerHeight * 0.9;
+      screenWidth = canvas.width;
+      screenHeight = canvas.height;
+      // Recalculate projection plane distance.
+      projectionPlaneDist = (screenWidth / 2) / Math.tan(FOV / 2);
+    }
+    
+    window.addEventListener('resize', resizeCanvas);
+    
     // -------------------- Seeded Random Generator --------------------
     // Mulberry32: Fast seeded pseudorandom generator.
     function mulberry32(a) {
@@ -122,9 +139,8 @@
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       }
     }
-
+    
     // -------------------- Procedural Level Generation --------------------
-    // Generates a maze using recursive backtracking.
     function generateMaze(width, height, rng) {
       let maze = [];
       for (let y = 0; y < height; y++) {
@@ -160,8 +176,7 @@
       carve(1, 1);
       return maze;
     }
-
-    // Optionally carve a rectangular room into the maze.
+    
     function addRoom(maze, rng) {
       const height = maze.length;
       const width = maze[0].length;
@@ -179,10 +194,9 @@
         }
       }
     }
-
-    // Generate a level from the maze and room additions.
+    
     function generateLevel(level) {
-      const size = 15 + (level - 1) * 2; // Level1:15, Level10:33 (always odd)
+      const size = 15 + (level - 1) * 2; // Always odd.
       let rng = mulberry32(level * 12345);
       let maze = generateMaze(size, size, rng);
       const roomCount = Math.floor(level / 2);
@@ -192,19 +206,18 @@
       let mapArray = maze.map(row => row.map(cell => cell === 0 ? '0' : '1').join(''));
       return mapArray;
     }
-
-    // Reset the level: generate a new map, reset player position, and position enemies.
+    
     function setLevel(level) {
       currentLevel = level;
       map = generateLevel(level);
       mapHeight = map.length;
       mapWidth = map[0].length;
-      // Place the player near the top-left of the map.
+      // Reset player.
       player.x = 1.5;
       player.y = 1.5;
       player.angle = 0;
       enemies.length = 0;
-      // Add enemies: up to 5 (or fewer if level < 5).
+      // Spawn up to 5 enemies (or fewer if level < 5).
       const enemyCount = Math.min(level, 5);
       for (let i = 0; i < enemyCount; i++) {
         let enemyRng = mulberry32(level + i + 1000);
@@ -216,32 +229,14 @@
         enemies.push({ x: ex + 0.5, y: ey + 0.5, alive: true });
       }
     }
-
+    
     // -------------------- Collision Check --------------------
-    // Returns true if the map cell at (x,y) is a wall.
     function isWall(x, y) {
       if (x < 0 || x >= mapWidth || y < 0 || y >= mapHeight) return true;
       return map[y][x] === '1';
     }
-
-    // Check if an enemy is occluded (i.e. a wall exists along the line from the player to the enemy)
-    function isOccluded(enemy) {
-      let dx = enemy.x - player.x;
-      let dy = enemy.y - player.y;
-      let dist = Math.hypot(dx, dy);
-      const stepSize = 0.05;
-      let steps = Math.ceil(dist / stepSize);
-      for (let i = 0; i < steps; i++) {
-        let t = i / steps;
-        let checkX = player.x + dx * t;
-        let checkY = player.y + dy * t;
-        if (isWall(Math.floor(checkX), Math.floor(checkY))) return true;
-      }
-      return false;
-    }
-
+    
     // -------------------- Input Handling --------------------
-    // Track key states for WASD movement.
     const keys = {};
     window.addEventListener('keydown', (e) => {
       keys[e.code] = true;
@@ -250,23 +245,29 @@
       }
     });
     window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-
-    // On canvas click, request pointer lock.
+    
+    // Pointer lock for camera panning.
     canvas.addEventListener('click', () => {
       if (document.pointerLockElement !== canvas) {
         canvas.requestPointerLock();
       }
     });
-
-    // Use mouse movement for panning the camera when pointer lock is active.
+    
     document.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === canvas) {
         player.angle += e.movementX * mouseSensitivity;
         player.angle = (player.angle + 2 * Math.PI) % (2 * Math.PI);
       }
     });
-
-    // -------------------- Gun Firing Logic & Smoke Trail --------------------
+    
+    // Fire gun when left-click is pressed.
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        fireGun();
+      }
+    });
+    
+    // -------------------- Gun Firing and Laser Beam --------------------
     function fireGun() {
       let distance = 0;
       let hitWall = false;
@@ -278,13 +279,6 @@
           hitWall = true;
         }
       }
-      // Create a smoke trail from the gun tip to the center (target) of the screen.
-      // The gun tip is defined relative to the overlay weapon graphic.
-      let gunTip = { x: screenWidth - 150, y: screenHeight - 50 };
-      let target = { x: screenWidth / 2, y: screenHeight / 2 };
-      smokeTrails.push({ start: gunTip, end: target, startTime: performance.now() });
-
-      // Check for enemy hits along the firing line.
       enemies.forEach(enemy => {
         if (!enemy.alive) return;
         const dx = enemy.x - player.x;
@@ -292,40 +286,25 @@
         const enemyDist = Math.hypot(dx, dy);
         let enemyAngle = Math.atan2(dy, dx);
         let angleDiff = enemyAngle - player.angle;
+        // Normalize angle difference.
         if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
         if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        // If enemy is nearly inline and closer than wall hit distance…
         if (Math.abs(angleDiff) < 0.1 && enemyDist < distance) {
           enemy.alive = false;
+          // Compute enemy's projected screen X.
+          const spriteScreenX = Math.floor((0.5 + (angleDiff / FOV)) * screenWidth);
+          // Record a laser beam: from the gun tip to enemy’s on-screen center.
+          laserBeams.push({
+            start: { x: gunTip.x, y: gunTip.y },
+            end: { x: spriteScreenX, y: screenHeight / 2 },
+            timestamp: performance.now()
+          });
           console.log("Enemy hit!");
         }
       });
     }
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) { // Primary button
-        fireGun();
-      }
-    });
-
-    // -------------------- Smoke Trail Rendering --------------------
-    function renderSmokeTrails() {
-      let now = performance.now();
-      for (let i = smokeTrails.length - 1; i >= 0; i--) {
-        let trail = smokeTrails[i];
-        let elapsed = now - trail.startTime;
-        if (elapsed > 1000) { // Remove after 1 second.
-          smokeTrails.splice(i, 1);
-          continue;
-        }
-        let alpha = 1 - (elapsed / 1000);
-        ctx.strokeStyle = "rgba(128,128,128," + alpha + ")";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(trail.start.x, trail.start.y);
-        ctx.lineTo(trail.end.x, trail.end.y);
-        ctx.stroke();
-      }
-    }
-
+    
     // -------------------- Game Update Logic --------------------
     let lastTime = performance.now();
     function update(deltaTime) {
@@ -333,7 +312,6 @@
       const moveStep = moveSpeed * deltaTime;
       let newX = player.x;
       let newY = player.y;
-      // Forward/backward movement (W/S)
       if (keys["KeyW"]) {
         newX += Math.cos(player.angle) * moveStep;
         newY += Math.sin(player.angle) * moveStep;
@@ -342,7 +320,6 @@
         newX -= Math.cos(player.angle) * moveStep;
         newY -= Math.sin(player.angle) * moveStep;
       }
-      // Strafing: using a rotated vector for left/right.
       if (keys["KeyD"]) {
         newX += Math.cos(player.angle + Math.PI/2) * moveStep;
         newY += Math.sin(player.angle + Math.PI/2) * moveStep;
@@ -351,13 +328,10 @@
         newX += Math.cos(player.angle - Math.PI/2) * moveStep;
         newY += Math.sin(player.angle - Math.PI/2) * moveStep;
       }
-      
-      // Collision detection.
       if (!isWall(Math.floor(newX), Math.floor(newY))) {
         player.x = newX;
         player.y = newY;
       }
-      // Level progression: Advance when all enemies are defeated.
       if (enemies.length > 0 && enemies.every(e => !e.alive)) {
         if (!levelCompleteTimestamp) {
           levelCompleteTimestamp = performance.now();
@@ -374,9 +348,11 @@
         levelCompleteTimestamp = null;
       }
     }
-
-    // -------------------- Raycasting Rendering --------------------
+    
+    // -------------------- Raycasting and Wall Rendering --------------------
     function renderWalls() {
+      // Clear and also build a z-buffer for occlusion.
+      zBuffer = [];
       for (let x = 0; x < screenWidth; x++) {
         const rayScreenPos = (x / screenWidth) - 0.5;
         const rayAngle = player.angle + rayScreenPos * FOV;
@@ -388,16 +364,14 @@
           const rayY = player.y + Math.sin(rayAngle) * distance;
           if (isWall(Math.floor(rayX), Math.floor(rayY))) hit = true;
         }
-        // Correct for the fish-eye effect.
         const correctedDistance = distance * Math.cos(rayAngle - player.angle);
+        zBuffer[x] = correctedDistance;
         const wallHeight = Math.floor((1 / correctedDistance) * projectionPlaneDist);
-        // Use a softer grey by capping maximum brightness.
         let shade = Math.floor(200 / (1 + correctedDistance * correctedDistance * 0.1));
         shade = Math.max(Math.min(shade, 200), 50);
         ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
-        const sliceX = x;
         const sliceY = (screenHeight / 2) - (wallHeight / 2);
-        ctx.fillRect(sliceX, sliceY, 1, wallHeight);
+        ctx.fillRect(x, sliceY, 1, wallHeight);
         // Render ceiling and floor.
         ctx.fillStyle = "#333";
         ctx.fillRect(x, 0, 1, sliceY);
@@ -405,15 +379,12 @@
         ctx.fillRect(x, sliceY + wallHeight, 1, screenHeight - (sliceY + wallHeight));
       }
     }
-
-    // -------------------- Enemy Rendering --------------------
+    
+    // -------------------- Enemy Rendering (3D Spheres with Occlusion) --------------------
     function renderEnemies() {
       let spriteData = [];
-      // For each enemy, if in the player's FOV and not occluded, add sprite data.
       enemies.forEach(enemy => {
         if (!enemy.alive) return;
-        // Only render if the enemy is not occluded.
-        if (isOccluded(enemy)) return;
         const dx = enemy.x - player.x;
         const dy = enemy.y - player.y;
         const enemyDist = Math.hypot(dx, dy);
@@ -422,114 +393,151 @@
         if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
         if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
         if (Math.abs(angleDiff) < (FOV / 2)) {
-          const spriteScreenX = Math.floor((0.5 + (angleDiff / FOV)) * screenWidth);
-          const spriteHeight = Math.floor(projectionPlaneDist / enemyDist);
+          const spriteScreenX = (0.5 + (angleDiff / FOV)) * screenWidth;
+          const spriteSize = Math.floor(projectionPlaneDist / enemyDist);
+          // Occlusion: if a wall is closer in this column, skip drawing.
+          const col = Math.floor(spriteScreenX);
+          if (col >= 0 && col < screenWidth && zBuffer[col] < enemyDist) return;
           spriteData.push({
             x: spriteScreenX,
-            size: spriteHeight,
-            distance: enemyDist,
-            enemy: enemy
+            size: spriteSize,
+            distance: enemyDist
           });
         }
       });
-      // Sort by distance from farthest to closest.
+      // Sort from farthest to nearest.
       spriteData.sort((a, b) => b.distance - a.distance);
       spriteData.forEach(sprite => {
-        const spriteWidth = sprite.size;
-        const spriteX = sprite.x - spriteWidth / 2;
-        // The sprite is vertically centered; add a slight oscillation (floating effect).
-        const oscillation = Math.sin(performance.now() / 200 + sprite.enemy.x * 10) * 5;
-        const spriteY = (screenHeight / 2) - (sprite.size / 2) + oscillation;
-        // Draw as a 3D sphere using a radial gradient.
-        const centerX = spriteX + spriteWidth / 2;
-        const centerY = spriteY + sprite.size / 2;
+        const centerX = sprite.x;
+        const centerY = screenHeight / 2;
         const radius = sprite.size / 2;
-        const gradient = ctx.createRadialGradient(centerX, centerY, radius * 0.2, centerX, centerY, radius);
-        gradient.addColorStop(0, "#ff8080");
-        gradient.addColorStop(1, "#800000");
-        ctx.fillStyle = gradient;
+        ctx.save();
+        // Create a radial gradient to simulate a 3D sphere.
+        let grd = ctx.createRadialGradient(centerX, centerY, radius * 0.3, centerX, centerY, radius);
+        grd.addColorStop(0, "#ff5555");
+        grd.addColorStop(1, "#880000");
+        ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         ctx.fill();
+        ctx.restore();
       });
     }
-
-    // -------------------- Indicator Bar Rendering --------------------
-    function renderEnemyIndicator() {
-      const barHeight = 20;
-      // Draw semi-transparent background for the indicator bar.
-      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-      ctx.fillRect(0, 0, screenWidth, barHeight);
-      let indicatorEnemy = null;
-      let minAngleDiff = Infinity;
+    
+    // -------------------- HUD Bar Rendering --------------------
+    function renderHUDBar() {
+      const hudHeight = 40;
+      // Draw the HUD bar background.
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(0, 0, screenWidth, hudHeight);
+      // For each enemy in the FOV, draw a red dot indicating its direction.
       enemies.forEach(enemy => {
         if (!enemy.alive) return;
-        let dx = enemy.x - player.x;
-        let dy = enemy.y - player.y;
-        let enemyAngle = Math.atan2(dy, dx);
-        let angleDiff = enemyAngle - player.angle;
-        if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        const dx = enemy.x - player.x;
+        const dy = enemy.y - player.y;
+        const angle = Math.atan2(dy, dx);
+        let angleDiff = angle - player.angle;
         if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-        if (Math.abs(angleDiff) < (FOV / 2) && Math.abs(angleDiff) < Math.abs(minAngleDiff)) {
-          minAngleDiff = angleDiff;
-          indicatorEnemy = enemy;
+        if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        if (Math.abs(angleDiff) < FOV / 2) {
+          let rel = (angleDiff + (FOV / 2)) / FOV; // normalize [0,1]
+          let dotX = rel * screenWidth;
+          let dotY = hudHeight / 2;
+          ctx.fillStyle = "red";
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 6, 0, 2 * Math.PI);
+          ctx.fill();
         }
       });
-      if (indicatorEnemy) {
-        // Map angleDiff from [-FOV/2, FOV/2] to [0, screenWidth].
-        let ratio = (minAngleDiff + (FOV/2)) / FOV;
-        let dotX = ratio * screenWidth;
-        let dotY = barHeight / 2;
-        ctx.fillStyle = "red";
+    }
+    
+    // -------------------- Laser Beam Rendering --------------------
+    function renderLaserBeams() {
+      const now = performance.now();
+      for (let i = laserBeams.length - 1; i >= 0; i--) {
+        const beam = laserBeams[i];
+        if (now - beam.timestamp > 1000) {
+          laserBeams.splice(i, 1);
+          continue;
+        }
+        ctx.save();
+        ctx.strokeStyle = "cyan";
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(beam.start.x, beam.start.y);
+        ctx.lineTo(beam.end.x, beam.end.y);
+        ctx.stroke();
+        ctx.restore();
       }
     }
-
-    // -------------------- Weapon Overlay Rendering --------------------
-    function renderWeapon() {
-      // Draw a simple weapon graphic in the bottom-right of the screen.
-      ctx.fillStyle = "#555";
-      ctx.beginPath();
-      ctx.moveTo(screenWidth - 150, screenHeight - 50);
-      ctx.lineTo(screenWidth - 50, screenHeight - 50);
-      ctx.lineTo(screenWidth - 70, screenHeight - 100);
-      ctx.lineTo(screenWidth - 170, screenHeight - 100);
-      ctx.closePath();
-      ctx.fill();
+    
+    // -------------------- Futuristic Laser Gun Rendering --------------------
+    function renderLaserGun() {
+      // Draw the gun in the bottom right corner.
+      const gunWidth = 200;
+      const gunHeight = 150;
+      const x = screenWidth - gunWidth;
+      const y = screenHeight - gunHeight;
+      ctx.save();
+      ctx.translate(x, y);
+      // Main body with a linear gradient.
+      let grd = ctx.createLinearGradient(0, 0, gunWidth, gunHeight);
+      grd.addColorStop(0, "#555");
+      grd.addColorStop(1, "#222");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, gunWidth, gunHeight);
+      // Draw the barrel.
+      ctx.fillStyle = "#888";
+      ctx.fillRect(gunWidth - 40, gunHeight/2 - 10, 40, 20);
+      // Add a border.
+      ctx.strokeStyle = "#aaa";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, gunWidth, gunHeight);
+      ctx.restore();
+      // Define the gun tip position (end of the barrel) in canvas coordinates.
+      gunTip.x = screenWidth;
+      gunTip.y = y + gunHeight/2;
     }
-
+    
     // -------------------- Overlay Rendering --------------------
-    // Draws level info, a center reticle, and the enemy indicator.
     function renderOverlay() {
-      // Level text and win message.
+      // Render HUD bar (top)
+      renderHUDBar();
+      // Render level information (top left)
       ctx.fillStyle = "white";
       ctx.font = "20px sans-serif";
       ctx.fillText(`Level: ${currentLevel}`, 10, 30);
-      if (gameOver) {
-        ctx.font = "40px sans-serif";
-        ctx.fillText("You Win!", screenWidth/2 - 60, screenHeight/2);
-      }
-      // Center reticle.
+      // Render enemy counter (top right)
+      const enemyCount = enemies.filter(e => e.alive).length;
+      ctx.fillText(`Enemies: ${enemyCount}`, screenWidth - 150, 30);
+      
+      // Draw a center reticle.
       ctx.fillStyle = "white";
       ctx.beginPath();
       ctx.arc(screenWidth / 2, screenHeight / 2, 3, 0, 2 * Math.PI);
       ctx.fill();
-      // Draw the enemy indicator bar.
-      renderEnemyIndicator();
+      
+      // Render any active laser beams.
+      renderLaserBeams();
+      
+      // Draw the futuristic laser gun in the bottom right.
+      renderLaserGun();
+      
+      // If game over, display win message.
+      if (gameOver) {
+        ctx.font = "40px sans-serif";
+        ctx.fillText("You Win!", screenWidth/2 - 60, screenHeight/2);
+      }
     }
-
-    // -------------------- Overall Render Function --------------------
+    
+    // -------------------- Main Render Function --------------------
     function render() {
       ctx.clearRect(0, 0, screenWidth, screenHeight);
       renderWalls();
       renderEnemies();
-      renderSmokeTrails();
       renderOverlay();
-      renderWeapon();
     }
-
+    
     // -------------------- Main Game Loop --------------------
     function gameLoop(currentTime) {
       const deltaTime = (currentTime - lastTime) / 1000;
@@ -538,9 +546,10 @@
       render();
       requestAnimationFrame(gameLoop);
     }
-
+    
     // -------------------- Start the Game --------------------
     window.addEventListener('load', () => {
+      resizeCanvas();
       setLevel(1);
       lastTime = performance.now();
       requestAnimationFrame(gameLoop);

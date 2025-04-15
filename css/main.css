@@ -77,10 +77,15 @@ body {
     color: #bbb;
   }
   .hero-image {
-    max-width: 100%;
+    max-width: 50%;
     height: auto;
     border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.7);
+  }
+  .hero-caption {
+    font-size: 0.9em;
+    color: #bbb;
+    margin-top: 8px;
   }
   
   /* About Section */
@@ -127,7 +132,8 @@ body {
     margin-top: 10px;
     font-size: 20px;
     font-weight: 600;
-    color: #0af;
+    color: #8030ca; /* #8a2be2 Purple or try #3a7bd5 for cobalt */
+    text-decoration: none;
   }
   
   /* Help Section */
