@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drawing Game</title>
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; background: #f0f0f0; }
+    #toolbar { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .color-btn { width: 30px; height: 30px; border: none; cursor: pointer; }
+    #size-range { width: 100px; }
+    #brush-select, #clear-btn, .menu-button { padding: 5px 10px; }
+    #canvas { border: 1px solid #ccc; background: #fff; cursor: none; }
+    #cursor { position: absolute; pointer-events: none; border: 1px solid #666; transform: translate(-50%, -50%); }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <div id="colors"></div>
+    <label for="size-range">Size:</label>
+    <input type="range" id="size-range" min="1" max="50" value="5" />
+    <label for="brush-select">Brush:</label>
+    <select id="brush-select">
+      <option value="round">Round Brush</option>
+      <option value="square">Square Brush</option>
+      <option value="spray">Spray Brush</option>
+      <option value="bucket">Paint Bucket</option>
+    </select>
+    <button id="clear-btn">Clear</button>
+    <button class="menu-button" onclick="window.location.href='../../index.html'" id="exitBtn">Exit</button>
+  </div>
+
+  <canvas id="canvas" width="800" height="600"></canvas>
+  <div id="cursor"></div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const cursor = document.getElementById('cursor');
+    let drawing = false;
+    let currentColor = '#000000';
+    let brushSize = 5;
+    let brushType = 'round';
+
+    // Color palette (17 colors)
+    const palette = [
+      '#000000','#FF0000','#00FF00','#0000FF','#FFFF00','#FF00FF','#00FFFF',
+      '#800000','#008000','#000080','#FFA500','#FFC0CB','#A52A2A','#808080','#FFFFFF',
+      '#D2B48C','#A0522D'
+    ];
+    const colorsDiv = document.getElementById('colors');
+    palette.forEach(color => {
+      const btn = document.createElement('button');
+      btn.className = 'color-btn';
+      btn.style.background = color;
+      btn.addEventListener('click', () => currentColor = color);
+      colorsDiv.appendChild(btn);
+    });
+
+    // Size control
+    document.getElementById('size-range').addEventListener('input', e => {
+      brushSize = e.target.value;
+      updateCursor();
+    });
+
+    // Brush type control
+    document.getElementById('brush-select').addEventListener('change', e => {
+      brushType = e.target.value;
+      updateCursor();
+    });
+
+    // Clear canvas
+    document.getElementById('clear-btn').addEventListener('click', () => ctx.clearRect(0, 0, canvas.width, canvas.height));
+
+    // Update custom cursor
+    function updateCursor() {
+      cursor.style.width = brushSize + 'px';
+      cursor.style.height = brushSize + 'px';
+      cursor.style.borderRadius = brushType === 'round' ? '50%' : '0';
+    }
+    updateCursor();
+
+    // Flood fill for paint bucket
+    function hexToRgba(hex) {
+      let c;
+      if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
+        c = hex.substring(1).split('');
+        if (c.length == 3) { c = [c[0], c[0], c[1], c[1], c[2], c[2]]; }
+        c = '0x' + c.join('');
+        return { r: (c >> 16) & 255, g: (c >> 8) & 255, b: c & 255, a: 255 };
+      }
+      throw new Error('Bad Hex');
+    }
+
+    function floodFill(x, y) {
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = img.data;
+      const width = img.width;
+      const idx = (y * width + x) * 4;
+      const target = { r: data[idx], g: data[idx+1], b: data[idx+2], a: data[idx+3] };
+      const fill = hexToRgba(currentColor);
+      if (target.r === fill.r && target.g === fill.g && target.b === fill.b) return;
+      const stack = [{ x, y }];
+      while (stack.length) {
+        const { x: cx, y: cy } = stack.pop();
+        const i = (cy * width + cx) * 4;
+        if (cx < 0 || cy < 0 || cx >= width || cy >= img.height) continue;
+        if (data[i] === target.r && data[i+1] === target.g && data[i+2] === target.b && data[i+3] === target.a) {
+          data[i] = fill.r; data[i+1] = fill.g; data[i+2] = fill.b; data[i+3] = fill.a;
+          stack.push({ x: cx+1, y: cy }, { x: cx-1, y: cy }, { x: cx, y: cy+1 }, { x: cx, y: cy-1 });
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+
+    // Spray brush effect
+    function spray(x, y) {
+      const density = 30;
+      for (let i = 0; i < density; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = Math.random() * brushSize;
+        const dx = Math.cos(angle) * r;
+        const dy = Math.sin(angle) * r;
+        ctx.fillStyle = currentColor;
+        ctx.fillRect(x + dx, y + dy, 1, 1);
+      }
+    }
+
+    // Drawing logic
+    canvas.addEventListener('mousedown', e => {
+      const x = e.offsetX;
+      const y = e.offsetY;
+      if (brushType === 'bucket') {
+        floodFill(x, y);
+      } else {
+        drawing = true;
+      }
+    });
+    canvas.addEventListener('mouseup', () => drawing = false);
+    canvas.addEventListener('mouseleave', () => drawing = false);
+
+    canvas.addEventListener('mousemove', e => {
+      const x = e.offsetX;
+      const y = e.offsetY;
+      cursor.style.left = canvas.offsetLeft + x + 'px';
+      cursor.style.top = canvas.offsetTop + y + 'px';
+      if (!drawing) return;
+      if (brushType === 'spray') spray(x, y);
+      else {
+        ctx.lineCap = brushType;
+        ctx.lineJoin = brushType;
+        ctx.lineWidth = brushSize;
+        ctx.strokeStyle = currentColor;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+    });
+  </script>
+</body>
+</html>
