@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dinosaur Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #f7f7f7;
+      font-family: sans-serif;
+    }
+    #gameContainer {
+      position: relative;
+    }
+    #gameCanvas {
+      background: #fff;
+      display: block;
+      border: 1px solid #ccc;
+    }
+    #uiOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #scoreboard {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 18px;
+      pointer-events: none;
+    }
+    #timer {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      font-size: 18px;
+      pointer-events: none;
+    }
+    #titleScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255,255,255,0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+    }
+    #titleScreen input,
+    #titleScreen button {
+      padding: 8px;
+      font-size: 16px;
+      margin-top: 8px;
+    }
+    #loadingMsg {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="200"></canvas>
+    <div id="uiOverlay">
+      <div id="timer">Time: 0.0s</div>
+      <div id="scoreboard">High Score: 0.0s</div>
+      <div id="titleScreen">
+        <h1>Dinosaur Game</h1>
+        <label for="username">Enter Username:</label>
+        <input type="text" id="username" placeholder="Your name" />
+        <button id="startBtn">Start</button>
+        <p id="loadingMsg">Loading assets...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const timerEl = document.getElementById('timer');
+    const scoreboardEl = document.getElementById('scoreboard');
+    const titleScreen = document.getElementById('titleScreen');
+    const usernameInput = document.getElementById('username');
+    const startBtn = document.getElementById('startBtn');
+    const loadingMsg = document.getElementById('loadingMsg');
+
+    // Constants for crouch gap
+    const IMAGE_CROUCH_HEIGHT = 30;
+    const FB_CROUCH_HEIGHT = 20;
+
+    let username = '';
+    let highScore = 0;
+    const baseSpeed = 6;
+    let gameSpeed = baseSpeed;
+    let gravity = 0.6;
+
+    let player, obstacles, lastObstacleTime, elapsed;
+    let isRunning = false;
+    let imageLoaded = false;
+    let useFallback = false;
+
+    // Load dinosaur image
+    const dinosaurImg = new Image();
+    dinosaurImg.onload = () => {
+      imageLoaded = true;
+      loadingMsg.textContent = '';
+      startBtn.disabled = false;
+    };
+    dinosaurImg.onerror = () => {
+      imageLoaded = true;
+      useFallback = true;
+      loadingMsg.textContent = 'Using fallback shape.';
+      startBtn.disabled = false;
+    };
+    startBtn.disabled = true;
+    dinosaurImg.src = 'assets/dinosaur.png';
+
+    class Player {
+      constructor() {
+        this.x = 50;
+        this.y = canvas.height - 50;
+        this.width = 44;
+        this.height = 47;
+        this.radius = 20;
+        this.dy = 0;
+        this.jumpHeight = -12;
+        this.grounded = true;
+        this.crouching = false;
+      }
+      draw() {
+        if (!imageLoaded) return;
+        if (useFallback) {
+          const r = this.crouching ? this.radius / 2 : this.radius;
+          const cy = this.crouching ? canvas.height - r : this.y + this.height / 2;
+          ctx.beginPath();
+          ctx.arc(this.x + this.width / 2, cy, r, 0, Math.PI * 2);
+          ctx.fillStyle = '#333';
+          ctx.fill();
+        } else {
+          if (this.crouching) {
+            ctx.drawImage(dinosaurImg, 0, 47, 44, 30, this.x, canvas.height - 30, 44, 30);
+          } else {
+            ctx.drawImage(dinosaurImg, 0, 0, 44, 47, this.x, this.y, 44, 47);
+          }
+        }
+      }
+      update() {
+        this.dy += gravity;
+        this.y += this.dy;
+        if (this.y > canvas.height - 50) {
+          this.y = canvas.height - 50;
+          this.dy = 0;
+          this.grounded = true;
+        }
+      }
+      jump() {
+        if (this.grounded) {
+          this.dy = this.jumpHeight;
+          this.grounded = false;
+        }
+      }
+      crouch(toggle) {
+        this.crouching = toggle;
+      }
+    }
+
+    class Obstacle {
+      constructor(type) {
+        this.type = type;
+        this.x = canvas.width;
+        if (type === 'cactus') {
+          this.y = canvas.height - 40;
+          this.width = 20;
+          this.height = 40;
+        } else {
+          const gap = useFallback ? FB_CROUCH_HEIGHT : IMAGE_CROUCH_HEIGHT;
+          this.y = 0;
+          this.width = 30;
+          this.height = canvas.height - gap;
+        }
+      }
+      draw() {
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+      update() {
+        this.x -= gameSpeed;
+      }
+    }
+
+    function spawnObstacle() {
+      const now = Date.now();
+      const minDelay = Math.max(500, 1500 - elapsed * 10);
+      const randDelay = Math.max(200, 1000 - elapsed * 5);
+      if (!lastObstacleTime || now - lastObstacleTime > minDelay + Math.random() * randDelay) {
+        const type = Math.random() < 0.7 ? 'cactus' : 'bird';
+        obstacles.push(new Obstacle(type));
+        lastObstacleTime = now;
+      }
+    }
+
+    function resetGame() {
+      player = new Player();
+      obstacles = [];
+      lastObstacleTime = Date.now();
+      elapsed = 0;
+      isRunning = true;
+      gameSpeed = baseSpeed;
+      scoreboardEl.textContent = `High Score: ${highScore.toFixed(1)}s`;
+      requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+      isRunning = false;
+      if (elapsed > highScore) {
+        highScore = elapsed;
+        localStorage.setItem(`dino_high_${username}`, highScore);
+        scoreboardEl.textContent = `High Score: ${highScore.toFixed(1)}s`;
+      }
+      titleScreen.style.display = 'flex';
+    }
+
+    function gameLoop() {
+      if (!isRunning) return;
+      gameSpeed = baseSpeed + elapsed / 20;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      spawnObstacle();
+      player.update();
+      player.draw();
+
+      obstacles.forEach((obs, i) => {
+        obs.update();
+        obs.draw();
+
+        let pX, pY, pW, pH;
+        if (useFallback) {
+          const r = player.crouching ? player.radius / 2 : player.radius;
+          pW = pH = r * 2;
+          const cy = player.crouching ? canvas.height - r : player.y + player.height / 2;
+          pX = player.x + player.width / 2 - r;
+          pY = cy - r;
+        } else {
+          pW = player.width;
+          pH = player.crouching ? IMAGE_CROUCH_HEIGHT : player.height;
+          pX = player.x;
+          pY = player.crouching ? canvas.height - pH : player.y;
+        }
+
+        if (
+          pX < obs.x + obs.width &&
+          pX + pW > obs.x &&
+          pY < obs.y + obs.height &&
+          pY + pH > obs.y
+        ) {
+          gameOver();
+        }
+
+        if (obs.x + obs.width < 0) obstacles.splice(i, 1);
+      });
+
+      elapsed += 1 / 60;
+      timerEl.textContent = `Time: ${elapsed.toFixed(1)}s`;
+      requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+      const name = usernameInput.value.trim();
+      if (!name || !imageLoaded) return;
+      username = name;
+      const stored = localStorage.getItem(`dino_high_${username}`);
+      highScore = stored ? parseFloat(stored) : 0;
+      titleScreen.style.display = 'none';
+      resetGame();
+    }
+
+    startBtn.addEventListener('click', startGame);
+    document.addEventListener('keydown', (e) => {
+      if (!isRunning) return;
+      if (e.key === 'ArrowUp') player.jump();
+      if (e.key === 'ArrowDown') player.crouch(true);
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowDown') player.crouch(false);
+    });
+  </script>
+</body>
+</html>
