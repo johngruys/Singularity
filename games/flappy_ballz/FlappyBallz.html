@@ -45,7 +45,8 @@
     let imgLoaded = false;
     ballImg.onload = () => { imgLoaded = true; };
     ballImg.onerror = () => { imgLoaded = false; console.warn('Failed to load image, using fallback.'); };
-    ballImg.src = 'FlappyBall.png';
+    // Correct path to the asset
+    ballImg.src = 'games/flappy_ballz/assets/flappyball.png';
 
     exitButton.addEventListener('click', () => {
       if (window.close) window.close();
