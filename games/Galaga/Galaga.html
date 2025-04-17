@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galaga Shooter with Shop & Leaderboard</title>
+  <style>
+    body { margin: 0; background: #000; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #eee; }
+    #titleUI, #storeUI { position: absolute; width: 800px; height: 600px; background: #111; border: 2px solid #555; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; padding: 20px; box-sizing: border-box; z-index: 10; }
+    /* Title Screen */
+    #titleUI h1 { font-size: 36px; margin-bottom: 20px; }
+    #titleUI input { padding: 8px; font-size: 18px; width: 220px; border: 1px solid #555; border-radius: 4px; background: #222; color: #eee; margin-right: 10px; }
+    #titleUI button { padding: 10px 20px; font-size: 18px; border: none; border-radius: 6px; background: #28a745; color: #fff; cursor: pointer; transition: background 0.2s; }
+    #titleUI button:hover { background: #218838; }
+    #titleUI h2 { margin-top: 30px; font-size: 24px; }
+    #leaderboardList { width: 100%; max-height: 200px; overflow-y: auto; padding: 0 20px; list-style: none; }
+    #leaderboardList li { padding: 6px 0; border-bottom: 1px solid #333; font-size: 18px; }
+    /* Game Canvas */
+    #gameCanvas { display: none; border: 4px solid #555; border-radius: 8px; background: #000; }
+    /* Menu Buttons */
+    #menuButtons { display: none; position: absolute; top: 20px; right: 20px; z-index: 20; }
+    #menuButtons .menu-button, #menuButtons #restartBtn { padding: 8px 12px; margin-left: 10px; font-size: 16px; border: none; border-radius: 4px; background: #444; color: #fff; cursor: pointer; transition: background 0.2s; }
+    #menuButtons .menu-button:hover, #menuButtons #restartBtn:hover { background: #666; }
+    /* Shop UI */
+    #storeUI h2 { font-size: 28px; margin-bottom: 10px; }
+    #storeUI p { font-size: 18px; margin: 6px 0; }
+    #timerDisplay { margin: 10px 0; font-size: 22px; font-weight: bold; }
+    .shop-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 20px; width: 100%; padding: 0 40px; box-sizing: border-box; }
+    .shop-item { background: #222; border: 1px solid #555; border-radius: 8px; padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .shop-item h3 { margin: 8px 0; font-size: 20px; }
+    .shop-item p { margin: 4px 0; }
+    .shop-item button { margin-top: 8px; padding: 8px 12px; font-size: 16px; border: none; border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; transition: background 0.2s; }
+    .shop-item button:hover { background: #0056b3; }
+    #skipShop { margin-top: 20px; background: #dc3545; width: 80%; }
+    #skipShop:hover { background: #c82333; }
+  </style>
+</head>
+<body>
+  <div id="titleUI">
+    <h1>Galaga-Style Shooter</h1>
+    <div>
+      <input id="usernameInput" type="text" placeholder="Enter your username" />
+      <button id="startBtn">Start</button>
+    </div>
+    <h2>Top 10 Leaderboard</h2>
+    <ol id="leaderboardList"></ol>
+  </div>
+
+  <div id="storeUI">
+    <h2>Shop - Level <span id="shopLevel"></span></h2>
+    <p>Currency: <span id="currency">0</span></p>
+    <div id="timerDisplay">Time left: <span id="timeLeft">0</span>s</div>
+    <div class="shop-grid">
+      <div class="shop-item">
+        <h3>Fire Rate</h3>
+        <p>Cost: <span id="costFireRate">0</span></p>
+        <button id="buyFireRate">Buy</button>
+      </div>
+      <div class="shop-item">
+        <h3>Bullet Speed</h3>
+        <p>Cost: <span id="costBulletSpeed">0</span></p>
+        <button id="buyBulletSpeed">Buy</button>
+      </div>
+      <div class="shop-item">
+        <h3>Spread Shot</h3>
+        <p>Cost: <span id="costSpread">0</span></p>
+        <button id="buySpread">Buy</button>
+      </div>
+    </div>
+    <button id="skipShop">Skip Upgrades</button>
+  </div>
+
+  <div id="menuButtons">
+    <button id="restartBtn">Restart</button>
+    <button class="menu-button" onclick="window.location.href='../../index.html'">Exit</button>
+  </div>
+
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <script>
+    // Setup canvas
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Leaderboard helpers
+    function getLeaderboard() { return JSON.parse(localStorage.getItem('leaderboard') || '[]'); }
+    function saveLeaderboard(lb) { localStorage.setItem('leaderboard', JSON.stringify(lb)); }
+    function updateLeaderboard(user, lvl) {
+      const lb = getLeaderboard();
+      const entry = lb.find(e => e.username === user);
+      if (entry) { if (lvl > entry.level) entry.level = lvl; } 
+      else { lb.push({ username: user, level: lvl }); }
+      saveLeaderboard(lb);
+    }
+    function updateLeaderboardDisplay() {
+      const lb = getLeaderboard().sort((a,b) => b.level - a.level).slice(0,10);
+      const list = document.getElementById('leaderboardList');
+      list.innerHTML = '';
+      lb.forEach(e => { const li = document.createElement('li'); li.textContent = `${e.username} - Level ${e.level}`; list.appendChild(li); });
+    }
+
+    // Game state
+    const initialSpeed=1.5, speedInc=0.3, laterInc=0.15, maxLevel=50;
+    let currentUsername=null, level=1, score=0, currency=0, gamePhase='title', gameOver=false, gameWin=false;
+    const player={x:0,y:540,width:40,height:40}; let bullets=[]; let fireRate=500, lastShot=0, bulletSpeed=7, spreadLevel=0;
+    const costs={fireRate:50,bulletSpeed:30,spread:40}; let shopTimer;
+    let enemies=[], enemyDir=1, enemySpeed=initialSpeed;
+
+    function resetPlayer(){ player.x=380; }
+    function calcSpeed(lv){ return lv<=10?initialSpeed+speedInc*(lv-1):initialSpeed+speedInc*9+laterInc*(lv-10); }
+    function createEnemies(){ enemies=[]; const rows=Math.min(2+Math.floor((level-1)/5),8);
+      for(let r=0;r<rows;r++) for(let c=0;c<8;c++) enemies.push({x:60+c*80,y:60+r*60,width:40,height:40});
+      enemyDir=1; enemySpeed=calcSpeed(level); }
+
+    function updateShopUI(){
+      document.getElementById('shopLevel').textContent=level;
+      document.getElementById('currency').textContent=currency;
+      document.getElementById('costFireRate').textContent=costs.fireRate;
+      document.getElementById('costBulletSpeed').textContent=costs.bulletSpeed;
+      document.getElementById('costSpread').textContent=costs.spread;
+    }
+
+    // Title UI
+    document.getElementById('startBtn').onclick=()=>{
+      const name=document.getElementById('usernameInput').value.trim();
+      if(!name) return alert('Enter username');
+      currentUsername=name;
+      document.getElementById('titleUI').style.display='none';
+      canvas.style.display='block';
+      document.getElementById('menuButtons').style.display='block';
+      resetGame();
+    };
+    function resetGame(){ level=1;score=0;currency=0;fireRate=500;bulletSpeed=7;spreadLevel=0;
+      costs.fireRate=50;costs.bulletSpeed=30;costs.spread=40; gamePhase='play';gameOver=false;gameWin=false;
+      bullets=[]; resetPlayer(); createEnemies(); updateShopUI(); }
+
+    // Restart
+    document.getElementById('restartBtn').onclick=()=>{
+      if(currentUsername) updateLeaderboard(currentUsername,level);
+      updateLeaderboardDisplay();
+      document.getElementById('titleUI').style.display='flex';
+      canvas.style.display='none';
+      document.getElementById('storeUI').style.display='none';
+      document.getElementById('menuButtons').style.display='none';
+    };
+
+    // Shop logic
+    function enterShop(){ gamePhase='shop'; currency+=level*10; updateShopUI();
+      document.getElementById('storeUI').style.display='flex';
+      document.getElementById('menuButtons').style.display='none';
+      let t=10; document.getElementById('timeLeft').textContent=t;
+      shopTimer=setInterval(()=>{ t--; document.getElementById('timeLeft').textContent=t; if(t<=0) exitShop(); },1000);
+    }
+    function exitShop(){ clearInterval(shopTimer);
+      document.getElementById('storeUI').style.display='none'; document.getElementById('menuButtons').style.display='block';
+      if(level<maxLevel){ level++; createEnemies(); gamePhase='play'; } else gameWin=gameOver=true;
+    }
+    document.getElementById('skipShop').onclick=exitShop;
+    document.getElementById('buyFireRate').onclick=()=>{ if(currency>=costs.fireRate){ currency-=costs.fireRate; fireRate=Math.max(50,fireRate-100); costs.fireRate*=2; updateShopUI(); }};
+    document.getElementById('buyBulletSpeed').onclick=()=>{ if(currency>=costs.bulletSpeed){ currency-=costs.bulletSpeed; bulletSpeed+=3; costs.bulletSpeed*=2; updateShopUI(); }};
+    document.getElementById('buySpread').onclick=()=>{ if(currency>=costs.spread){ currency-=costs.spread; spreadLevel++; costs.spread*=2; updateShopUI(); }};
+
+    function shootBullet(){ const now=Date.now(); if(now-lastShot<fireRate) return; lastShot=now;
+      const cx=player.x+player.width/2-5; const count=spreadLevel+1;
+      for(let i=0;i<count;i++){ const off=(i-(count-1)/2)*30; bullets.push({x:cx+off,y:player.y,width:10,height:20,speed:bulletSpeed}); }
+    }
+
+    function update(){ if(gameOver||gamePhase!=='play') return;
+      bullets.forEach((b,i)=>{ b.y-=b.speed; if(b.y<0) bullets.splice(i,1); });
+      let rev=false; enemies.forEach(e=>{ e.x+=enemyDir*enemySpeed; if(e.x<0||e.x+e.width>canvas.width) rev=true; });
+      if(rev){ enemyDir*=-1; enemies.forEach(e=>e.y+=20); }
+      bullets.forEach((b,bi)=>{ enemies.forEach((e,ei)=>{ if(b.x<e.x+e.width&&b.x+b.width>e.x&&b.y<e.y+e.height&&b.y+b.height>e.y){ bullets.splice(bi,1); enemies.splice(ei,1); score+=10; } }); });
+      if(enemies.length===0) enterShop(); enemies.forEach(e=>{ if(e.y+e.height>player.y) gameOver=true; });
+    }
+    function draw(){ ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle='lime'; ctx.fillRect(player.x,player.y,player.width,player.height);
+      ctx.fillStyle='yellow'; bullets.forEach(b=>ctx.fillRect(b.x,b.y,b.width,b.height));
+      ctx.fillStyle='red'; enemies.forEach(e=>ctx.fillRect(e.x,e.y,e.width,e.height));
+      ctx.fillStyle='white'; ctx.font='20px Arial'; ctx.fillText('Score:'+score,10,30); ctx.fillText('Level:'+level,canvas.width-120,30);
+      if(gameOver){ if(currentUsername) updateLeaderboard(currentUsername,level); ctx.fillStyle='white'; ctx.font='50px Arial'; ctx.fillText(gameWin?'YOU WIN!':'GAME OVER',canvas.width/2-150,canvas.height/2); }
+    }
+    function gameLoop(){ update(); draw(); requestAnimationFrame(gameLoop); }
+    canvas.addEventListener('mousemove',e=>{ const r=canvas.getBoundingClientRect(); player.x=Math.max(0,Math.min(canvas.width-player.width,e.clientX-r.left-player.width/2)); });
+    canvas.addEventListener('mousedown',()=>{ if(!gameOver&&gamePhase==='play') shootBullet(); });
+
+    updateLeaderboardDisplay();
+    document.getElementById('titleUI').style.display='flex'; canvas.style.display='none'; document.getElementById('menuButtons').style.display='none'; document.getElementById('storeUI').style.display='none';
+    gameLoop();
+  </script>
+</body>
+</html>
