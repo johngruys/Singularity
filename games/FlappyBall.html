@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flappy Bird Clone</title>
+  <style>
+    body {
+      margin: 0;
+      background: #70c5ce;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+    canvas {
+      border: 2px solid #000;
+      background: #70c5ce;
+    }
+    #exitButton {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: red;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <button id="exitButton">Exit</button>
+  <canvas id="gameCanvas" width="400" height="600"></canvas>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const exitButton = document.getElementById('exitButton');
+
+    exitButton.addEventListener('click', () => {
+      // Attempt to close the window; fallback to hiding the game
+      if (window.close) window.close();
+      document.body.innerHTML = '<h2 style="color:#fff; text-align:center;">Game Exited</h2>';
+    });
+
+    // Game settings remain unchanged
+    const GRAVITY = 0.15;
+    const FLAP = -5;
+    const PIPE_WIDTH = 50;
+    const PIPE_GAP = 250;
+    const PIPE_SPEED = 1;
+    let frames = 0;
+    let score = 0;
+    let highScore = 0;
+    let gameOver = false;
+
+    const bird = { x: 50, y: 300, width: 40, height: 30, velocity: 0 };
+    const pipes = [];
+
+    function resetGame() {
+      bird.y = 300;
+      bird.velocity = 0;
+      frames = 0;
+      score = 0;
+      pipes.length = 0;
+      gameOver = false;
+      loop();
+    }
+
+    function drawBird() {
+      ctx.save();
+      ctx.translate(bird.x + bird.width / 2, bird.y + bird.height / 2);
+      ctx.rotate(Math.min(bird.velocity / 10, 0.5));
+      ctx.fillStyle = '#FF0';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, bird.width / 2, bird.height / 2, 0, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPipes() {
+      ctx.fillStyle = '#0f0';
+      pipes.forEach(p => {
+        ctx.fillRect(p.x, 0, PIPE_WIDTH, p.top);
+        ctx.fillRect(p.x, canvas.height - p.bottom, PIPE_WIDTH, p.bottom);
+      });
+    }
+
+    function updatePipes() {
+      if (frames % 240 === 0) {
+        const topHeight = Math.random() * (canvas.height - PIPE_GAP - 100) + 50;
+        const bottomHeight = canvas.height - topHeight - PIPE_GAP;
+        pipes.push({ x: canvas.width, top: topHeight, bottom: bottomHeight });
+      }
+      pipes.forEach((p, i) => {
+        p.x -= PIPE_SPEED;
+        if (p.x + PIPE_WIDTH < 0) {
+          pipes.splice(i, 1);
+          score++;
+          if (score > highScore) highScore = score;
+        }
+      });
+    }
+
+    function checkCollision() {
+      if (bird.y + bird.height > canvas.height || bird.y < 0) gameOver = true;
+      pipes.forEach(p => {
+        if (bird.x + bird.width > p.x && bird.x < p.x + PIPE_WIDTH) {
+          if (bird.y < p.top || bird.y + bird.height > canvas.height - p.bottom) gameOver = true;
+        }
+      });
+    }
+
+    function drawScore() {
+      ctx.fillStyle = '#000';
+      ctx.font = '24px sans-serif';
+      ctx.fillText(`Score: ${score}`, 10, 25);
+      ctx.fillText(`High: ${highScore}`, 10, 50);
+    }
+
+    function loop() {
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '36px sans-serif';
+        ctx.fillText('Game Over!', 80, 300);
+        ctx.font = '24px sans-serif';
+        ctx.fillText('Click to Restart', 100, 350);
+        return;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      updatePipes();
+      bird.velocity += GRAVITY;
+      bird.y += bird.velocity;
+      drawPipes();
+      drawBird();
+      checkCollision();
+      drawScore();
+      frames++;
+      requestAnimationFrame(loop);
+    }
+
+    canvas.addEventListener('click', () => {
+      if (gameOver) resetGame();
+      else bird.velocity = FLAP;
+    });
+
+    loop();
+  </script>
+</body>
+</html>
