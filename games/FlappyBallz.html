@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Flappy Bird Clone</title>
+  <title>Flappy Football</title>
   <style>
     body {
       margin: 0;
@@ -40,13 +40,19 @@
     const ctx = canvas.getContext('2d');
     const exitButton = document.getElementById('exitButton');
 
+    // Load the football image with load/error handling
+    const ballImg = new Image();
+    let imgLoaded = false;
+    ballImg.onload = () => { imgLoaded = true; };
+    ballImg.onerror = () => { imgLoaded = false; console.warn('Failed to load image, using fallback.'); };
+    ballImg.src = 'FlappyBall.png';
+
     exitButton.addEventListener('click', () => {
-      // Attempt to close the window; fallback to hiding the game
       if (window.close) window.close();
       document.body.innerHTML = '<h2 style="color:#fff; text-align:center;">Game Exited</h2>';
     });
 
-    // Game settings remain unchanged
+    // Game settings
     const GRAVITY = 0.15;
     const FLAP = -5;
     const PIPE_WIDTH = 50;
@@ -70,14 +76,19 @@
       loop();
     }
 
-    function drawBird() {
+    function drawBall() {
       ctx.save();
       ctx.translate(bird.x + bird.width / 2, bird.y + bird.height / 2);
       ctx.rotate(Math.min(bird.velocity / 10, 0.5));
-      ctx.fillStyle = '#FF0';
-      ctx.beginPath();
-      ctx.ellipse(0, 0, bird.width / 2, bird.height / 2, 0, 0, 2 * Math.PI);
-      ctx.fill();
+      if (imgLoaded) {
+        ctx.drawImage(ballImg, -bird.width / 2, -bird.height / 2, bird.width, bird.height);
+      } else {
+        // Fallback: draw a circle
+        ctx.fillStyle = '#FF0';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, bird.width / 2, bird.height / 2, 0, 0, 2 * Math.PI);
+        ctx.fill();
+      }
       ctx.restore();
     }
 
@@ -100,7 +111,7 @@
         if (p.x + PIPE_WIDTH < 0) {
           pipes.splice(i, 1);
           score++;
-          if (score > highScore) highScore = score;
+          highScore = Math.max(highScore, score);
         }
       });
     }
@@ -137,19 +148,20 @@
       bird.velocity += GRAVITY;
       bird.y += bird.velocity;
       drawPipes();
-      drawBird();
+      drawBall();
       checkCollision();
       drawScore();
       frames++;
       requestAnimationFrame(loop);
     }
 
+    // Start the game immediately
+    loop();
+
     canvas.addEventListener('click', () => {
       if (gameOver) resetGame();
       else bird.velocity = FLAP;
     });
-
-    loop();
   </script>
 </body>
 </html>
