@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sniper Scope Game</title>
+  <style>
+    body, html {
+      margin: 0; padding: 0;
+      background: #000;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #gameContainer {
+      position: relative;
+      width: 1000px;
+      height: 700px;
+    }
+    #gameCanvas {
+      display: block;
+      background: #333;
+    }
+    #exitBtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 5px 10px;
+      font-size: 14px;
+      display: none;
+      z-index: 10;
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: #0f0;
+      text-shadow: 1px 1px 2px #000;
+      display: none;
+      z-index: 10;
+      text-align: right;
+    }
+    #score { font-size: 18px; }
+    #instruction { font-size: 16px; color: #ff0; margin-top: 5px; }
+    #timer { font-size: 18px; margin-top: 5px; }
+    #titleScreen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      z-index: 20;
+    }
+    #titleScreen input { font-size: 16px; padding: 5px; margin: 5px; }
+    #leaderboard { margin-top: 20px; }
+    #leaderboard h2 { margin: 0 0 10px 0; }
+    #leaderboard ul { list-style: none; padding: 0; }
+    #leaderboard li { margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="1000" height="700"></canvas>
+    <div id="titleScreen">
+      <h1>Sniper Scope Challenge</h1>
+      <div>
+        <label for="username">Enter Username:</label>
+        <input type="text" id="username" placeholder="Your name">
+        <button id="startBtn">Start</button>
+      </div>
+      <div id="leaderboard">
+        <h2>Leaderboard</h2>
+        <ul id="scoresList"></ul>
+      </div>
+    </div>
+    <button onclick="window.location.href='../../index.html'" id="exitBtn">Exit</button>
+    <div id="hud">
+      <div id="score">Score: 0</div>
+      <div id="instruction"></div>
+      <div id="timer">Time: 00:00</div>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const titleScreen = document.getElementById('titleScreen');
+    const startBtn = document.getElementById('startBtn');
+    const usernameInput = document.getElementById('username');
+    const scoresList = document.getElementById('scoresList');
+    const exitBtn = document.getElementById('exitBtn');
+    const hud = document.getElementById('hud');
+    const scoreEl = document.getElementById('score');
+    const instructionEl = document.getElementById('instruction');
+    const timerEl = document.getElementById('timer');
+
+    let username = '';
+    let leaderboard = JSON.parse(localStorage.getItem('sniperLeaderboard') || '[]');
+    const maxLeaderboard = 5;
+
+    const colorList = [
+      { name: 'Red', hex: '#ff0000' },
+      { name: 'Blue', hex: '#0000ff' },
+      { name: 'Green', hex: '#00ff00' },
+      { name: 'Yellow', hex: '#ffff00' },
+      { name: 'Magenta', hex: '#ff00ff' },
+      { name: 'Cyan', hex: '#00ffff' },
+      { name: 'Orange', hex: '#ffa500' },
+      { name: 'Lime', hex: '#00ff80' }
+    ];
+
+    function renderLeaderboard() {
+      scoresList.innerHTML = '';
+      leaderboard.sort((a, b) => a.time - b.time)
+        .slice(0, maxLeaderboard)
+        .forEach(entry => {
+          const li = document.createElement('li');
+          li.textContent = `${entry.name}: ${formatTime(entry.time)}`;
+          scoresList.appendChild(li);
+        });
+    }
+
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      return `${minutes}:${seconds}`;
+    }
+
+    // Game variables
+    let score = 0,
+        level = 1,
+        startTime = 0,
+        elapsedTime = 0;
+    const maxLevels = 10;
+    let mouseX = canvas.width / 2,
+        mouseY = canvas.height / 2,
+        frameCount = 0;
+    const targets = [], shots = [];
+
+    // Define scenes for background
+    const scenes = [
+      { sky: '#87ceeb', ground: '#228B22' },
+      { sky: '#ffa07a', ground: '#8b4513' },
+      { sky: '#add8e6', ground: '#2e8b57' },
+      { sky: '#d3d3d3', ground: '#696969' }
+    ];
+
+    class Target {
+      constructor(x, y, speed, correct, colorObj) {
+        this.x = x; this.y = y;
+        this.speed = speed; this.dir = Math.random() < 0.5 ? -1 : 1;
+        this.size = 20; this.phase = Math.random() * Math.PI * 2;
+        this.alive = true; this.correct = correct;
+        this.color = colorObj.hex; this.name = colorObj.name;
+      }
+      update() {
+        if (!this.alive) return;
+        this.x += this.speed * this.dir;
+        if (this.x < this.size || this.x > canvas.width - this.size) this.dir *= -1;
+        this.phase += 0.05;
+      }
+      draw(ctx) {
+        const bob = Math.sin(this.phase) * 5;
+        const armA = Math.sin(frameCount * 0.1 + this.phase) * 0.5;
+        const legA = Math.cos(frameCount * 0.1 + this.phase) * 0.5;
+        ctx.save();
+        ctx.translate(this.x, this.y + bob);
+        ctx.strokeStyle = this.color;
+        ctx.fillStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, -30, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, 10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(armA) * 15, Math.sin(armA) * 15);
+        ctx.moveTo(0, 0); ctx.lineTo(-Math.cos(armA) * 15, Math.sin(armA) * 15); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(Math.sin(legA) * 10, Math.cos(legA) * 20);
+        ctx.moveTo(0, 10); ctx.lineTo(-Math.sin(legA) * 10, Math.cos(legA) * 20); ctx.stroke();
+        ctx.restore();
+      }
+      isHit(px, py) {
+        const headY = this.y - 30 + Math.sin(this.phase) * 5;
+        const inHead = Math.hypot(px - this.x, py - headY) <= 10;
+        const inBody = Math.hypot(px - this.x, py - this.y) <= this.size;
+        return this.alive && (inHead || inBody);
+      }
+    }
+
+    function startLevel() {
+      targets.length = 0; shots.length = 0;
+      const decoys = Math.min(level + 1, 5);
+      const speedBase = 1 + level * 0.1;
+      const targetColorObj = colorList[(level - 1) % colorList.length];
+      const decoyColors = colorList.filter(c => c.name !== targetColorObj.name);
+      for (let i = 0; i < decoys; i++) {
+        const c = decoyColors[Math.floor(Math.random() * decoyColors.length)];
+        targets.push(new Target(
+          Math.random() * (canvas.width - 100) + 50,
+          canvas.height - 100,
+          speedBase + Math.random() * 0.3,
+          false,
+          c
+        ));
+      }
+      targets.push(new Target(
+        Math.random() * (canvas.width - 100) + 50,
+        canvas.height - 100,
+        speedBase + Math.random() * 0.3,
+        true,
+        targetColorObj
+      ));
+      scoreEl.textContent = `Score: ${score}`;
+      instructionEl.textContent = `Level ${level}: Shoot the ${targetColorObj.name} target.`;
+    }
+
+    function resetGame() {
+      alert('Wrong target! Starting over.');
+      level = 1; score = 0;
+      startLevel(); startTime = Date.now();
+    }
+
+    function finishGame() {
+      elapsedTime = Date.now() - startTime;
+      leaderboard.push({ name: username, time: elapsedTime });
+      localStorage.setItem('sniperLeaderboard', JSON.stringify(leaderboard));
+      alert(`Completed in ${formatTime(elapsedTime)}`);
+      showTitle();
+    }
+
+    function nextLevel() {
+      level++;
+      if (level > maxLevels) finishGame();
+      else startLevel();
+    }
+
+    canvas.addEventListener('mousemove', e => {
+      const r = canvas.getBoundingClientRect();
+      mouseX = e.clientX - r.left;
+      mouseY = e.clientY - r.top;
+    });
+
+    canvas.addEventListener('click', () => {
+      shots.push({ x: mouseX, y: mouseY, life: 10 });
+      for (let t of targets) {
+        if (t.isHit(mouseX, mouseY)) {
+          t.alive = false;
+          if (t.correct) { score++; nextLevel(); }
+          else resetGame();
+          break;
+        }
+      }
+    });
+
+    function update() {
+      targets.forEach(t => t.update());
+      for (let i = shots.length - 1; i >= 0; i--) {
+        if (--shots[i].life <= 0) shots.splice(i, 1);
+      }
+      frameCount++;
+      elapsedTime = Date.now() - startTime;
+      timerEl.textContent = `Time: ${formatTime(elapsedTime)}`;
+    }
+
+    function drawScene() {
+      const scene = scenes[(level - 1) % scenes.length];
+      ctx.fillStyle = scene.sky;
+      ctx.fillRect(0, 0, canvas.width, canvas.height - 150);
+      ctx.fillStyle = scene.ground;
+      ctx.fillRect(0, canvas.height - 150, canvas.width, 150);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+      [100, 300, 600].forEach(x => {
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x, canvas.height - 80, 15, 30);
+      });
+      targets.forEach(t => t.draw(ctx));
+      shots.forEach(s => {
+        ctx.globalAlpha = s.life / 10;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 20, 0, Math.PI * 2);
+        ctx.fillStyle = 'yellow'; ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    function drawScope() {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath(); ctx.arc(mouseX, mouseY, 150, 0, Math.PI * 2); ctx.fill();
+      ctx.restore(); ctx.globalCompositeOperation = 'source-over';
+      ctx.save(); ctx.beginPath(); ctx.arc(mouseX, mouseY, 150, 0, Math.PI * 2); ctx.clip();
+      ctx.translate(mouseX, mouseY); ctx.scale(2, 2); ctx.translate(-mouseX, -mouseY);
+      drawScene(); ctx.restore();
+      ctx.beginPath(); ctx.arc(mouseX, mouseY, 150, 0, Math.PI * 2);
+      ctx.strokeStyle = '#0f0'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mouseX - 20, mouseY); ctx.lineTo(mouseX + 20, mouseY);
+      ctx.moveTo(mouseX, mouseY - 20); ctx.lineTo(mouseX, mouseY + 20);
+      ctx.strokeStyle = '#0f0'; ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    function draw() { drawScene(); drawScope(); }
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+    function showTitle() {
+      hud.style.display = 'none';
+      exitBtn.style.display = 'none';
+      titleScreen.style.display = 'flex';
+      renderLeaderboard();
+    }
+
+    startBtn.addEventListener('click', () => {
+      username = usernameInput.value.trim() || 'Unknown';
+      level = 1; score = 0;
+      startLevel(); startTime = Date.now();
+      titleScreen.style.display = 'none';
+      hud.style.display = 'block';
+      exitBtn.style.display = 'block';
+    });
+
+    exitBtn.addEventListener('click', () => showTitle());
+
+    renderLeaderboard();
+    loop();
+  </script>
+</body>
+</html>
