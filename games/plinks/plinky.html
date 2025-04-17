@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Plinko Game</title>
+  <style>
+    body { margin: 0; background: #222; color: #fff; font-family: sans-serif; overflow: hidden; }
+    #gameCanvas { display: block; background: #111; margin: 120px auto 20px; }
+    #exit { position:absolute; top:10px; left:10px; color:#f00; text-decoration:none; font-size:18px; padding:5px 10px; background:#333; border-radius:5px; }
+    #shopButton { position:absolute; top:50px; left:10px; padding:5px 10px; background:#0069d9; color:#fff; border:none; border-radius:5px; cursor:pointer; }
+    #shopMenu {
+      position:fixed;
+      top:50%; left:50%; transform:translate(-50%,-50%);
+      width:600px; max-height:90vh;
+      background:rgba(0,0,0,0.9);
+      padding:30px; border-radius:12px;
+      overflow-y:auto; display:none;
+      box-shadow:0 0 20px rgba(0,0,0,0.7);
+      z-index:1000;
+    }
+    #shopMenu h2 { margin:0 0 10px; font-size:24px; text-align:center; }
+    #closeShop { position:absolute; top:10px; right:10px; background:#900; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; }
+    .shopItem {
+      display:flex; align-items:center; margin:10px 0;
+    }
+    .shopItem img {
+      width:80px; height:80px;
+      margin-right:15px;
+      border:2px solid #fff;
+      border-radius:6px;
+      object-fit:cover;
+    }
+    .shopItem span { flex:1; }
+    .shopItem .price { margin-right:10px; }
+    .shopItem button { background:#28a745; border:none; padding:6px 12px; border-radius:4px; color:#fff; cursor:pointer; }
+    #countdown { position:absolute; top:10px; left:200px; background:#333; padding:6px 12px; border-radius:6px; font-size:16px; box-shadow:0 0 5px rgba(0,0,0,0.5); }
+    #balance { position:absolute; top:10px; left:50%; transform:translateX(-50%); background:#333; padding:8px 16px; border-radius:8px; font-size:24px; font-weight:bold; box-shadow:0 0 10px rgba(0,0,0,0.5); }
+    #betControls { position:absolute; top:60px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:8px; background:rgba(0,0,0,0.6); padding:8px 16px; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.5); }
+    #betControls input[type=number] { width:80px; padding:6px; border:1px solid #555; border-radius:4px; background:#333; color:#fff; }
+    #betControls button { padding:6px 12px; border:none; border-radius:4px; background:#28a745; color:#fff; cursor:pointer; font-size:16px; }
+    #magicCodes { position:absolute; top:10px; right:10px; display:flex; flex-direction:column; align-items:flex-end; background:rgba(0,0,0,0.6); padding:8px; border-radius:8px; box-shadow:0 0 10px rgba(0,0,0,0.5); }
+    #magicCodes input[type=text] { width:120px; padding:4px; border-radius:4px; border:1px solid #555; background:#333; color:#fff; }
+    #magicCodes button { margin-top:4px; padding:4px 8px; border:none; border-radius:4px; background:#555; color:#fff; cursor:pointer; }
+    .popup { position:absolute; font-size:18px; font-weight:bold; opacity:1; animation: moveUp 1.5s ease-out forwards; }
+    @keyframes moveUp { from { opacity:1; transform: translateY(0); } to { opacity:0; transform: translateY(-40px); } }
+  </style>
+</head>
+<body>
+  <a id="exit" href="../../index.html">Exit Game</a>
+  <button id="shopButton">Shop</button>
+  <div id="shopMenu">
+    <button id="closeShop">X</button>
+    <h2>Shop</h2>
+    <!-- Highest value first -->
+    <div class="shopItem"><img src="assets/images/platinum.jpg" alt="Platinum Plinko"><span>Platinum Plinko</span><span class="price">$10000</span><button data-price="10000">Buy</button></div>
+    <div class="shopItem"><img src="assets/images/sapphire.jpg" alt="Sapphire Plinko"><span>Sapphire Plinko</span><span class="price">$7500</span><button data-price="7500">Buy</button></div>
+    <div class="shopItem"><img src="assets/images/ruby.jpg" alt="Ruby Plinko"><span>Ruby Plinko</span><span class="price">$5000</span><button data-price="5000">Buy</button></div>
+    <div class="shopItem"><img src="assets/images/diamond.jpg" alt="Diamond Plinko"><span>Diamond Plinko</span><span class="price">$2500</span><button data-price="2500">Buy</button></div>
+    <div class="shopItem"><img src="assets/images/gold_plinko.png" alt="Gold Plinko"><span>Gold Plinko</span><span class="price">$1000</span><button data-price="1000">Buy</button></div>
+    <div class="shopItem"><img src="assets/images/lucky_charm.jpg" alt="Lucky Charm"><span>Lucky Charm</span><span class="price">$500</span><button data-price="500">Buy</button></div>
+    <div class="shopItem"><img src="assets/images/extra_ball.jpg" alt="Extra Ball"><span>Extra Ball</span><span class="price">$200</span><button data-price="200">Buy</button></div>
+    <div class="shopItem"><img src="assets/images/upgrade_pegs.jpg" alt="Upgrade Pegs"><span>Upgrade Pegs</span><span class="price">$50</span><button data-price="50">Buy</button></div>
+  </div>
+  <div id="countdown">Loading bonus timer...</div>
+  <canvas id="gameCanvas" width="800" height="940"></canvas>
+  <div id="balance">$0</div>
+  <div id="betControls">
+    <label for="betInput">Bet:</label>
+    <input type="number" id="betInput" value="1" min="1" step="1">
+    <button id="dropButton">Drop Ball</button>
+  </div>
+  <div id="magicCodes">
+    <input type="text" id="cmdInput" placeholder="magic codes">
+    <button id="cmdSubmit">Submit</button>
+  </div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const bins = 17, rows = bins;
+    const binMultipliers = [100,50,25,10,5,2,1,0.5,0.33,0.5,1,2,5,10,25,50,100];
+    const gravity = 0.2, ballRadius = 8, pegRadius = 5, damping = 0.5, contactThreshold = 0.03;
+    const binWidth = canvas.width / bins, binHeight = 60;
+    let boardHeight = 420;
+    let balance;
+    const balls = [];
+    let pegs = [];
+    const highlights = new Array(bins).fill(0);
+
+    // Load balance and bonus
+    const now = Date.now();
+    const storedBalance = parseFloat(localStorage.getItem('balance') || '0');
+    const lastPlayed = parseInt(localStorage.getItem('lastPlayed') || '0', 10);
+    let nextBonusTime;
+    if (now - lastPlayed > 24 * 60 * 60 * 1000) {
+      balance = storedBalance + 100;
+      localStorage.setItem('lastPlayed', now.toString());
+      nextBonusTime = now + 24 * 60 * 60 * 1000;
+    } else {
+      balance = storedBalance;
+      nextBonusTime = lastPlayed + 24 * 60 * 60 * 1000;
+    }
+
+    function buildPegs() {
+      pegs = [];
+      const topY = canvas.height - binHeight - boardHeight;
+      const vSpacing = boardHeight / rows;
+      for (let row = 1; row <= rows; row++) {
+        const count = row + 1;
+        const y = topY + row * vSpacing;
+        const startX = canvas.width/2 - ((count-1)*binWidth)/2;
+        for (let j = 0; j < count; j++) pegs.push({ x: startX + j*binWidth, y });
+      }
+    }
+    buildPegs();
+
+    function updateBoardHeight(h) {
+      boardHeight = Math.max(100, Math.min(rows * binWidth, h));
+      buildPegs();
+    }
+
+    const balanceEl = document.getElementById('balance');
+    const betInput = document.getElementById('betInput');
+    const dropButton = document.getElementById('dropButton');
+    const cmdInput = document.getElementById('cmdInput');
+    const cmdSubmit = document.getElementById('cmdSubmit');
+    const countdownEl = document.getElementById('countdown');
+    const shopButton = document.getElementById('shopButton');
+    const shopMenu = document.getElementById('shopMenu');
+    const closeShop = document.getElementById('closeShop');
+
+    function updateBalance() {
+      balanceEl.textContent = `$${balance.toFixed(2)}`;
+      localStorage.setItem('balance', balance.toFixed(2));
+    }
+    updateBalance();
+
+    function formatTime(ms) {
+      const total = Math.max(0, ms);
+      const hrs = Math.floor(total / 3600000);
+      const mins = Math.floor((total % 3600000) / 60000);
+      const secs = Math.floor((total % 60000) / 1000);
+      return `${hrs}h ${mins}m ${secs}s`;
+    }
+
+    function updateCountdown() {
+      const diff = nextBonusTime - Date.now();
+      const timeText = diff > 0 ? formatTime(diff) : 'Bonus available!';
+      countdownEl.textContent = `Time until next login bonus: ${timeText}`;
+    }
+    setInterval(updateCountdown, 1000);
+    updateCountdown();
+
+    shopButton.addEventListener('click', () => shopMenu.style.display = 'block');
+    closeShop.addEventListener('click', () => shopMenu.style.display = 'none');
+    shopMenu.querySelectorAll('.shopItem button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const price = parseFloat(btn.dataset.price);
+        if (balance >= price) {
+          balance -= price; updateBalance(); createPopup(`-\$${price}`, '#f00');
+        } else createPopup('Not enough funds', '#f00');
+      });
+    });
+
+    function createPopup(text, color) {
+      const rect = balanceEl.getBoundingClientRect();
+      const el = document.createElement('div'); el.className = 'popup'; el.textContent = text;
+      el.style.color = color; el.style.left = `${rect.right + 10}px`; el.style.top = `${rect.top + 16}px`;
+      document.body.appendChild(el); el.addEventListener('animationend', () => el.remove());
+    }
+    function createBinPopup(text, color, binIndex) {
+      const cr = canvas.getBoundingClientRect();
+      const xCenter = cr.left + binIndex * binWidth + binWidth/2;
+      const yStart = cr.top + canvas.height - binHeight - 20;
+      const el = document.createElement('div'); el.className = 'popup'; el.textContent = text;
+      el.style.color = color; document.body.appendChild(el);
+      const w = el.offsetWidth; el.style.left = `${xCenter - w/2}px`; el.style.top = `${yStart}px`;
+      el.addEventListener('animationend', () => el.remove());
+    }
+
+    cmdSubmit.addEventListener('click', () => {
+      const cmd = cmdInput.value.trim().toLowerCase();
+      if (cmd === 'stretchit') updateBoardHeight(rows * binWidth);
+      else if (cmd === 'normal') updateBoardHeight(420);
+      else if (cmd === 'luck1.0') updateBoardHeight(426);
+      else if (cmd === 'luck2.0') updateBoardHeight(440);
+      else if (cmd === '5dollermode') {
+        updateBoardHeight(rows * binWidth); balance = 0; updateBalance();
+        for (let i = 0; i < 1000; i++) {
+          const x = canvas.width/2 + (Math.random()*(binWidth/4) - binWidth/8);
+          const spawnY = canvas.height - binHeight - boardHeight - ballRadius;
+          balls.push({ x, y: spawnY, vx:(Math.random()*0.2 - 0.1), vy:0, radius:ballRadius, bet:10, contacts:{} });
+        }
+      } else if (cmd === 'reset') {
+        balance = 0; updateBalance();
+      }
+      cmdInput.value = '';
+    });
+
+    function dropBall() {
+      const bet = parseFloat(betInput.value);
+      if (isNaN(bet) || bet <= 0 || bet > balance) return;
+      balance -= bet; updateBalance();
+      const x = canvas.width/2 + (Math.random()*(binWidth/4) - binWidth/8);
+      const spawnY = canvas.height - binHeight - boardHeight - ballRadius;
+      balls.push({ x, y: spawnY, vx:(Math.random()*0.2 - 0.1), vy:0, radius:ballRadius, bet, contacts:{} });
+    }
+    dropButton.addEventListener('click', dropBall);
+    document.addEventListener('keydown', e => { if (e.code==='Space') { e.preventDefault(); dropBall(); }});
+
+    let lastTime = performance.now();
+    function update(time) {
+      const dt = (time - lastTime)/1000; lastTime = time;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const mid = (bins - 1)/2;
+      for (let i = 0; i < bins; i++) {
+        const x = i * binWidth;
+        const d = Math.abs(i-mid)/mid;
+        const hue = d * 240;
+        let sat = 60, light = 60;
+        if (time - highlights[i] < 500) light = 80;
+        ctx.fillStyle = `hsl(${hue},${sat}%,${light}%)`;
+        ctx.fillRect(x, canvas.height-binHeight, binWidth, binHeight);
+        ctx.beginPath(); ctx.moveTo(x,canvas.height); ctx.lineTo(x,canvas.height-binHeight);
+        ctx.strokeStyle='#555'; ctx.stroke();
+        ctx.fillStyle='#fff'; ctx.font='14px sans-serif'; ctx.textAlign='center';
+        ctx.fillText(binMultipliers[i]+'x', x+binWidth/2, canvas.height-binHeight+20);
+      }
+      ctx.beginPath(); ctx.moveTo(canvas.width,canvas.height); ctx.lineTo(canvas.width,canvas.height-binHeight);
+      ctx.strokeStyle='#555'; ctx.stroke();
+      pegs.forEach(p => { ctx.beginPath(); ctx.arc(p.x,p.y,pegRadius,0,Math.PI*2); ctx.fillStyle='#888'; ctx.fill(); });
+      for (let i = balls.length-1; i >= 0; i--) {
+        const b = balls[i]; b.vy += gravity; b.x += b.vx; b.y += b.vy;
+        if (b.x - b.radius < 0) { b.x = b.radius; b.vx = -b.vx * damping; }
+        else if (b.x + b.radius > canvas.width) { b.x = canvas.width - b.radius; b.vx = -b.vx * damping; }
+        for (let j = 1; j < bins; j++) {
+          const wx = j * binWidth;
+          if (b.y > canvas.height-binHeight && b.x - b.radius < wx && b.x + b.radius > wx) {
+            b.x = b.vx > 0 ? wx - b.radius : wx + b.radius;
+            b.vx = -b.vx * damping;
+          }
+        }
+        pegs.forEach((p,pi) => {
+          const dx = b.x - p.x, dy = b.y - p.y;
+          const dist = Math.hypot(dx,dy);
+          const key = pi;
+          if (dist < b.radius + pegRadius) {
+            const prev = b.contacts[key] || 0;
+            const cur = prev + dt;
+            b.contacts[key] = cur;
+            const factor = cur <= contactThreshold ? damping : 1;
+            const nx = dx/dist, ny = dy/dist;
+            const vn = b.vx*nx + b.vy*ny;
+            b.vx -= 2*vn*nx; b.vy -= 2*vn*ny;
+            b.vx *= factor; b.vy *= factor;
+            const overlap = b.radius+pegRadius-dist;
+            b.x += nx*overlap; b.y += ny*overlap;
+          } else if (b.contacts[key]) delete b.contacts[key];
+        });
+        if (b.y > canvas.height-binHeight) {
+          const idx = Math.floor(b.x/binWidth);
+          if (idx >= 0 && idx < bins) {
+            const gain = b.bet * (binMultipliers[idx] - 1);
+            balance += gain; updateBalance(); highlights[idx] = time;
+            const d = Math.abs(idx-mid)/mid;
+            const hue = d*240;
+            createPopup(`+${gain.toFixed(2)}`, `hsl(${hue},60%,60%)`);
+            createBinPopup(`+${gain.toFixed(2)}`, `hsl(${hue},60%,60%)`, idx);
+          }
+          balls.splice(i,1); continue;
+        }
+        ctx.beginPath(); ctx.arc(b.x,b.y,b.radius,0,Math.PI*2);
+        ctx.fillStyle='#fff'; ctx.fill();
+      }
+      requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>
