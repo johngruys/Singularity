@@ -10,10 +10,27 @@
         #ui span, #ui label, #ui select, #ui button { margin: 0 8px; vertical-align: middle; color: #fff; }
         #ui select, #ui button { background: #6b4f3f; border: none; padding: 4px 8px; border-radius: 4px; }
         #ui button:hover, #ui select:hover { background: #8b6a4d; cursor: pointer; }
+        /* New Exit Button styling */
+        #ui button#exitButton {
+          margin-top: 5px;
+          padding: 5px 10px;
+          font-size: 14px;
+          background: #a00;
+          border: none;
+          border-radius: 3px;
+          color: #fff;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+
+        #ui button#exitButton:hover {
+          background: #b00;
+        }
     </style>
 </head>
 <body>
 <div id="ui">
+    <button id="exitButton" onclick="window.location.href='../index.html'">Exit Game</button>
     <span id="money">Gold: 100</span>
     <span id="lives">Lives: 10</span>
     <span id="round">Round: 1</span>
@@ -26,6 +43,7 @@
     </select>
     <button id="speedBtn">Speed x1</button>
     <button id="startBtn">Start Round</button>
+    
 </div>
 <canvas id="gameCanvas" width="600" height="600"></canvas>
 <script>
